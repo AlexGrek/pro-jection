@@ -12,7 +12,14 @@
       "Bash(curl -sf -o /dev/null http://localhost:8080/live)",
       "Bash(curl -sf -o /dev/null http://localhost:5173/)",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(awk '{print $4}')",
+      "Bash(xargs -I{} stat -f \"%z %N\" \"{}\")",
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s http://localhost:8080/live)",
+      "Bash(npm ls *)",
+      "Bash(cargo check *)",
+      "Bash(npx tsc *)"
     ],
     "additionalDirectories": [
       "/tmp"

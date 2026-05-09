@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::http::HeaderValue;
-use axum::routing::get;
+use axum::routing::{get, post};
 use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
@@ -41,6 +41,11 @@ pub fn create_app(state: Arc<AppState>) -> Router {
         .route("/ready", get(routes::health::ready))
         .route("/health", get(routes::health::health_check))
         .route("/ws/echo", get(routes::ws_test::ws_echo))
+        .route("/ws/controller/{code}", get(routes::sessions::ws_controller))
+        .route("/ws/projector/{code}", get(routes::sessions::ws_projector))
+        .route("/api/sessions/{code}/history", get(routes::history::get_history))
+        .route("/api/sessions/{code}/history/undo", post(routes::history::undo))
+        .route("/api/sessions/{code}/history/redo", post(routes::history::redo))
         .nest_service("/assets", ServeDir::new(&assets_dir))
         .fallback_service(spa_fallback)
         .layer(cors)

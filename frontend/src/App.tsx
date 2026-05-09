@@ -1,25 +1,19 @@
-import { Link } from 'react-router-dom'
+import { Routes, Route } from 'react-router-dom'
+import { HomePage } from './pages/HomePage'
+import { ControllerPage } from './pages/ControllerPage'
+import { ProjectorPage } from './pages/ProjectorPage'
+import HealthPage from './pages/HealthPage'
+import WsTestPage from './pages/WsTestPage'
 
 function App() {
   return (
-    <main className="p-8 max-w-2xl mx-auto font-sans">
-      <h1 className="text-3xl font-semibold mb-2">pro-jection</h1>
-      <p className="text-gray-600 mb-6">
-        React SPA served by the Rust/axum backend.
-      </p>
-      <ul className="space-y-2">
-        <li>
-          <Link className="text-blue-600 underline" to="/health">
-            Health
-          </Link>
-        </li>
-        <li>
-          <Link className="text-blue-600 underline" to="/ws-test">
-            WebSocket echo test
-          </Link>
-        </li>
-      </ul>
-    </main>
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/controller/:code" element={<ControllerPage />} />
+      <Route path="/projector/:code" element={<ProjectorPage />} />
+      <Route path="/health" element={<HealthPage />} />
+      <Route path="/ws-test" element={<WsTestPage />} />
+    </Routes>
   )
 }
 
