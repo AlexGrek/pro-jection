@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { IconDeviceGamepad2, IconArrowLeft, IconRefresh, IconLetterT } from '@tabler/icons-react'
+import {
+  IconDeviceGamepad2,
+  IconArrowLeft,
+  IconRefresh,
+  IconLetterT,
+  IconChevronUp,
+  IconChevronDown,
+  IconChevronsUp,
+  IconChevronsDown,
+} from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PhaserCanvas, type PhaserCanvasHandle } from '@/components/PhaserCanvas'
@@ -34,17 +43,13 @@ export function ControllerPage() {
   const [connState, setConnState] = useState<ConnState>('connecting')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // Local log — accumulated client-side; not persisted by the server.
-  const [log, setLog] = useState<Scene[]>([])
-
   const [objects, setObjects] = useState<Layer[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const canvasRef = useRef<PhaserCanvasHandle>(null)
-  const logRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Mirrors `objects` so commit handlers (slider release, color blur) always read fresh state.
+  // Mirror so commit handlers (slider release, color blur) always read fresh state.
   const objectsRef = useRef<Layer[]>(objects)
   useEffect(() => { objectsRef.current = objects }, [objects])
 
@@ -63,9 +68,7 @@ export function ControllerPage() {
       clearTimeout(debounceRef.current)
       debounceRef.current = null
     }
-    const scene: Scene = { objects: next }
-    wsRef.current.send(JSON.stringify(scene))
-    setLog((prev) => [...prev, scene])
+    wsRef.current.send(JSON.stringify({ objects: next } satisfies Scene))
   }, [])
 
   const sendDebounced = useCallback((next: Layer[]) => {
@@ -96,7 +99,6 @@ export function ControllerPage() {
           setConnState('error')
         }
       } else {
-        // Raw scene replayed on reconnect — restore local state without re-broadcasting.
         applyObjects((data as Scene).objects)
       }
     }
@@ -108,10 +110,6 @@ export function ControllerPage() {
     connect()
     return () => wsRef.current?.close()
   }, [connect])
-
-  useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [log])
 
   // ── Drag from canvas: state updates locally, send fires on drag-end. ──────
   const onPositionChange = useCallback((id: string, x: number, y: number) => {
@@ -134,6 +132,17 @@ export function ControllerPage() {
     return next
   }
 
+  const moveLayer = (from: number, to: number) => {
+    if (from === to) return
+    const max = objectsRef.current.length - 1
+    const target = Math.max(0, Math.min(max, to))
+    const next = [...objectsRef.current]
+    const [item] = next.splice(from, 1)
+    next.splice(target, 0, item)
+    applyObjects(next)
+    sendNow(next)
+  }
+
   const selectLayer = (id: string) => {
     setSelectedId(id)
     canvasRef.current?.selectObject(id)
@@ -148,6 +157,9 @@ export function ControllerPage() {
     canvasRef.current?.selectObject(id)
     sendNow(next)
   }
+
+  // Display layers in reverse z-order so top of panel = front of stack (Photoshop convention).
+  const displayLayers = [...objects].map((layer, idx) => ({ layer, idx })).reverse()
 
   return (
     <main className="h-screen flex flex-col bg-linear-to-br from-slate-950 to-blue-950 overflow-hidden">
@@ -221,7 +233,7 @@ export function ControllerPage() {
           </div>
 
           {/* Layers toolbox */}
-          <div className="w-48 shrink-0 border-l border-slate-800/60 bg-slate-950/60 flex flex-col">
+          <div className="w-56 shrink-0 border-l border-slate-800/60 bg-slate-950/60 flex flex-col">
             <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
               Layers
             </div>
@@ -229,29 +241,62 @@ export function ControllerPage() {
               {objects.length === 0 && (
                 <p className="text-slate-700 text-[10px] px-2 py-1">No layers yet.</p>
               )}
-              {objects.map((layer) => (
-                <button
-                  key={layer.id}
-                  onClick={() => selectLayer(layer.id)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded border text-left cursor-default transition-colors ${
-                    layer.id === selectedId
-                      ? 'bg-blue-500/10 border-blue-500/30 text-white'
-                      : 'bg-slate-800/30 border-slate-700/20 text-slate-400 hover:text-white hover:bg-slate-800/50'
-                  }`}
-                >
-                  <IconLetterT size={11} className="shrink-0" />
-                  <span className="text-xs font-light truncate flex-1">{layerLabel(layer)}</span>
-                </button>
-              ))}
+              {displayLayers.map(({ layer, idx }) => {
+                const isFront = idx === objects.length - 1
+                const isBack = idx === 0
+                const isSelected = layer.id === selectedId
+                return (
+                  <div
+                    key={layer.id}
+                    className={`flex items-center gap-0.5 pl-2 pr-1 py-1 rounded border transition-colors ${
+                      isSelected
+                        ? 'bg-blue-500/10 border-blue-500/30 text-white'
+                        : 'bg-slate-800/30 border-slate-700/20 text-slate-400 hover:text-white hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <button
+                      onClick={() => selectLayer(layer.id)}
+                      className="flex-1 min-w-0 flex items-center gap-1.5 text-left"
+                    >
+                      <IconLetterT size={11} className="shrink-0" />
+                      <span className="text-xs font-light truncate">{layerLabel(layer)}</span>
+                    </button>
+                    <ReorderBtn
+                      label="Bring to front"
+                      icon={<IconChevronsUp size={12} stroke={1.5} />}
+                      disabled={isFront}
+                      onClick={() => moveLayer(idx, objects.length - 1)}
+                    />
+                    <ReorderBtn
+                      label="Forward"
+                      icon={<IconChevronUp size={12} stroke={1.5} />}
+                      disabled={isFront}
+                      onClick={() => moveLayer(idx, idx + 1)}
+                    />
+                    <ReorderBtn
+                      label="Backward"
+                      icon={<IconChevronDown size={12} stroke={1.5} />}
+                      disabled={isBack}
+                      onClick={() => moveLayer(idx, idx - 1)}
+                    />
+                    <ReorderBtn
+                      label="Send to back"
+                      icon={<IconChevronsDown size={12} stroke={1.5} />}
+                      disabled={isBack}
+                      onClick={() => moveLayer(idx, 0)}
+                    />
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
 
-        {/* Bottom row: props + log + add */}
+        {/* Bottom row: properties + modifiers + animations + add */}
         <div className="h-56 flex border-t border-slate-800/60 shrink-0">
 
           {/* Selected object properties */}
-          <div className="w-48 shrink-0 border-r border-slate-800/60 bg-slate-950/40 flex flex-col">
+          <div className="w-56 shrink-0 border-r border-slate-800/60 bg-slate-950/40 flex flex-col">
             <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
               Properties
             </div>
@@ -298,7 +343,7 @@ export function ControllerPage() {
                   <span className="text-slate-400 text-[10px] w-7 text-right shrink-0">{selected.font_size}</span>
                 </div>
 
-                {/* Color — preview on input, send on commit (picker close / blur) */}
+                {/* Color — preview on input, send on commit */}
                 <div className="flex items-center gap-2">
                   <span className="text-slate-500 text-[10px] w-10 shrink-0">Color</span>
                   <input
@@ -309,6 +354,23 @@ export function ControllerPage() {
                     disabled={connState !== 'connected'}
                     className="w-7 h-6 rounded cursor-pointer border border-slate-700 bg-transparent disabled:opacity-40"
                   />
+                </div>
+
+                {/* Opacity — preview while dragging, send on release */}
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500 text-[10px] w-10 shrink-0">Alpha</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(selected.opacity * 100)}
+                    onChange={(e) => patchSelected({ opacity: Number(e.target.value) / 100 })}
+                    onPointerUp={() => sendNow(objectsRef.current)}
+                    onKeyUp={() => sendNow(objectsRef.current)}
+                    disabled={connState !== 'connected'}
+                    className="flex-1 accent-blue-500 touch-none"
+                  />
+                  <span className="text-slate-400 text-[10px] w-7 text-right shrink-0">{Math.round(selected.opacity * 100)}</span>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -327,43 +389,62 @@ export function ControllerPage() {
             )}
           </div>
 
-          {/* Log */}
-          <div className="flex-1 min-w-0 flex flex-col">
+          {/* Modifiers panel — placeholder for Blender-style modifier stack */}
+          <div className="flex-1 min-w-0 border-r border-slate-800/60 flex flex-col">
             <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
-              Log
+              Modifiers
             </div>
-            <div ref={logRef} className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
-              {log.length === 0 ? (
-                <p className="text-slate-700 text-xs font-light px-1 py-1">No messages yet.</p>
+            <div className="flex-1 min-h-0 overflow-y-auto p-2">
+              {selected ? (
+                selected.modifiers.length === 0 ? (
+                  <p className="text-slate-700 text-[10px] px-1 py-1 italic">No modifiers.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {selected.modifiers.map((_m, i) => (
+                      <div
+                        key={i}
+                        className="px-2 py-1 rounded bg-slate-800/40 border border-slate-700/20 text-xs text-slate-400 font-light"
+                      >
+                        Modifier #{i + 1}
+                      </div>
+                    ))}
+                  </div>
+                )
               ) : (
-                log.map((scene, i) => {
-                  const firstText = scene.objects.find((o) => o.type === 'text') as TextLayer | undefined
-                  return (
-                    <div
-                      key={i}
-                      className="flex items-center gap-2 px-2 py-1 rounded bg-slate-800/40 border border-slate-700/20"
-                    >
-                      {firstText && (
-                        <span
-                          className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{ background: firstText.color }}
-                        />
-                      )}
-                      <span className="text-white font-light text-xs truncate flex-1">
-                        {firstText?.text ?? '(empty)'}
-                        {scene.objects.length > 1 && (
-                          <span className="text-slate-600 ml-1">+{scene.objects.length - 1}</span>
-                        )}
-                      </span>
-                    </div>
-                  )
-                })
+                <p className="text-slate-700 text-[10px] px-1 py-1">Select a layer.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Animations panel — placeholder */}
+          <div className="flex-1 min-w-0 border-r border-slate-800/60 flex flex-col">
+            <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
+              Animations
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-2">
+              {selected ? (
+                Object.keys(selected.animations).length === 0 ? (
+                  <p className="text-slate-700 text-[10px] px-1 py-1 italic">No animations.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {Object.keys(selected.animations).map((k) => (
+                      <div
+                        key={k}
+                        className="px-2 py-1 rounded bg-slate-800/40 border border-slate-700/20 text-xs text-slate-400 font-light"
+                      >
+                        {k}
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                <p className="text-slate-700 text-[10px] px-1 py-1">Select a layer.</p>
               )}
             </div>
           </div>
 
           {/* Add object toolbox */}
-          <div className="w-48 shrink-0 border-l border-slate-800/60 bg-slate-950/40 flex flex-col">
+          <div className="w-48 shrink-0 bg-slate-950/40 flex flex-col">
             <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
               Add Object
             </div>
@@ -382,5 +463,27 @@ export function ControllerPage() {
         </div>
       </div>
     </main>
+  )
+}
+
+interface ReorderBtnProps {
+  label: string
+  icon: React.ReactNode
+  disabled: boolean
+  onClick: () => void
+}
+
+function ReorderBtn({ label, icon, disabled, onClick }: ReorderBtnProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className="shrink-0 p-0.5 rounded text-slate-500 hover:text-white hover:bg-slate-700/60 disabled:opacity-20 disabled:hover:text-slate-500 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+    >
+      {icon}
+    </button>
   )
 }

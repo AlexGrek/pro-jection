@@ -52,9 +52,11 @@ export class ProjectionScene extends Phaser.Scene {
       }
     }
 
-    for (const layer of scene.objects) {
+    scene.objects.forEach((layer, i) => {
       this._applyLayer(layer)
-    }
+      const go = this.gameObjects.get(layer.id)
+      if (go) go.setDepth(i)
+    })
 
     if (this.hint) {
       this.hint.setVisible(scene.objects.length === 0)
@@ -79,6 +81,7 @@ export class ProjectionScene extends Phaser.Scene {
       existing.setFontSize(layer.font_size)
       existing.setColor(layer.color)
       existing.setFontFamily(fontCss(layer))
+      existing.setAlpha(layer.opacity ?? 1)
     } else {
       const t = this.add
         .text(px, py, layer.text, {
@@ -89,6 +92,7 @@ export class ProjectionScene extends Phaser.Scene {
           align: 'center',
         })
         .setOrigin(0.5)
+        .setAlpha(layer.opacity ?? 1)
 
       this.gameObjects.set(layer.id, t)
 
