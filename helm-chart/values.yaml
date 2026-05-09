@@ -1,0 +1,50 @@
+image:
+  repository: grekodocker/pro-jection
+  tag: latest
+  pullPolicy: Always
+
+# Single stateful pod — this pod IS the file storage (OpenDAL fs on a PVC).
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8080
+
+# Storage: single PVC mounted at /storage; the OpenDAL config (rendered via
+# ConfigMap) points fs root at it.
+storage:
+  size: 2Gi
+  # Leave empty to use the cluster default StorageClass.
+  storageClassName: ""
+  mountPath: /storage
+
+# Static SPA dir baked into the image.
+staticDir: /app/static
+
+ingress:
+  enabled: true
+  className: traefik
+  host: proj.alexgr.space
+  tls:
+    secretName: pro-jection-tls
+  annotations:
+    # Wire up cert-manager here if you use it, e.g.:
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 1000m
+    memory: 256Mi
+
+logLevel: info
+
+# Optional pull-secret for private registries.
+imagePullSecrets:
+  - name: dockerhub-creds
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

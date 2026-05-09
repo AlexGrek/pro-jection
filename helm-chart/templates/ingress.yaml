@@ -1,0 +1,62 @@
+{{- if .Values.ingress.enabled }}
+# HTTP ingress — redirects all traffic to HTTPS via Traefik middleware.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "pro-jection.fullname" . }}-http
+  labels:
+    {{- include "pro-jection.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-{{ include "pro-jection.fullname" . }}-https-redirect@kubernetescrd"
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "pro-jection.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+---
+# HTTPS ingress — terminates TLS, serves the app.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "pro-jection.fullname" . }}-https
+  labels:
+    {{- include "pro-jection.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  tls:
+    - secretName: {{ .Values.ingress.tls.secretName }}
+      hosts:
+        - {{ .Values.ingress.host | quote }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "pro-jection.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

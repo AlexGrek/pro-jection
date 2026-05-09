@@ -1,0 +1,30 @@
+# Rust
+/backend/target/
+/backend/.target-cache/
+
+# Local OpenDAL fs storage (created at runtime by config/storage.yaml)
+/backend/storage/
+/backend/data/
+
+# Frontend
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.vite/
+
+# Docker buildx local cache (used by task docker:build / docker:release)
+/.buildx-cache/
+/.buildx-cache-new/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp

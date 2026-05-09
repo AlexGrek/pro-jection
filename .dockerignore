@@ -1,0 +1,33 @@
+# Rust build artifacts
+backend/target/
+backend/.target-cache/
+
+# Local OpenDAL fs storage (host-only)
+backend/storage/
+backend/data/
+
+# Frontend
+frontend/node_modules/
+frontend/.vite/
+
+# Docker buildx local cache
+.buildx-cache/
+.buildx-cache-new/
+
+# Not needed inside the build context
+.git/
+.gitignore
+.dockerignore
+.claude/
+CLAUDE.md
+README.md
+Taskfile.yml
+helm-chart/
+
+# Env / logs / OS junk
+.env
+.env.*
+*.log
+.DS_Store
+.idea/
+.vscode/

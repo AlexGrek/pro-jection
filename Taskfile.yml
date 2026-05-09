@@ -1,0 +1,158 @@
+version: "3"
+
+vars:
+  RELEASE: proj
+  NAMESPACE: pro-jection
+  CHART: ./helm-chart
+  BACKEND_DIR: ./backend
+  FRONTEND_DIR: ./frontend
+  IMAGE: grekodocker/pro-jection
+  BUILDX_LOCAL_CACHE: ./.buildx-cache
+  BUILDX_LOCAL_CACHE_NEW: ./.buildx-cache-new
+  BUILDX_BUILDER: multiarch-builder
+  GIT_HASH:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo "dev"
+
+tasks:
+  # ── Dev ─────────────────────────────────────────────────────────────────────
+
+  dev:
+    desc: Run backend and Vite dev server in parallel
+    deps: [dev:clear-ports]
+    cmd: |
+      #!/usr/bin/env bash
+      set -e
+      cleanup() {
+        echo ""
+        echo "==> Shutting down dev servers..."
+        kill "$BACKEND_PID" 2>/dev/null || true
+      }
+      trap cleanup EXIT
+
+      echo "==> Starting backend..."
+      if command -v cargo-watch &>/dev/null; then
+        (cd {{.BACKEND_DIR}} && cargo watch -x run) &
+      else
+        (cd {{.BACKEND_DIR}} && cargo run) &
+      fi
+      BACKEND_PID=$!
+
+      echo "==> Starting frontend dev server..."
+      (cd {{.FRONTEND_DIR}} && npm run dev)
+
+  dev:clear-ports:
+    desc: Kill any processes on backend (8080) or Vite (5173)
+    cmd: |
+      #!/usr/bin/env bash
+      for port in 8080 5173; do
+        pids=$(lsof -ti TCP:$port -sTCP:LISTEN 2>/dev/null) || true
+        if [ -n "$pids" ]; then
+          echo "==> Releasing port $port (pid $pids)"
+          kill $pids 2>/dev/null || true
+        fi
+      done
+      exit 0
+
+  backend:run:
+    desc: Run the backend (hot-reload via cargo-watch if available)
+    dir: "{{.BACKEND_DIR}}"
+    cmd: |
+      if command -v cargo-watch &>/dev/null; then
+        cargo watch -x run
+      else
+        cargo run
+      fi
+
+  frontend:install:
+    desc: Install frontend npm dependencies
+    dir: "{{.FRONTEND_DIR}}"
+    cmd: npm i
+
+  frontend:dev:
+    desc: Start Vite dev server (http://localhost:5173)
+    dir: "{{.FRONTEND_DIR}}"
+    cmd: npm run dev
+
+  frontend:build:
+    desc: Build the frontend for production (outputs to frontend/dist)
+    dir: "{{.FRONTEND_DIR}}"
+    cmd: npm run build
+
+  build:
+    desc: Release build of the backend
+    dir: "{{.BACKEND_DIR}}"
+    cmd: cargo build --release
+
+  # ── Docker ──────────────────────────────────────────────────────────────────
+
+  docker:build:
+    desc: Build frontend, then build linux/amd64 image with persistent buildx cache
+    cmds:
+      - task: frontend:build
+      - mkdir -p {{.BUILDX_LOCAL_CACHE}}
+      - rm -rf {{.BUILDX_LOCAL_CACHE_NEW}}
+      - docker buildx build --builder {{.BUILDX_BUILDER}} --platform linux/amd64 --load --cache-from=type=local,src={{.BUILDX_LOCAL_CACHE}} --cache-to=type=local,dest={{.BUILDX_LOCAL_CACHE_NEW}},mode=max -f Dockerfile -t {{.IMAGE}}:{{.GIT_HASH}} -t {{.IMAGE}}:latest .
+      - rm -rf {{.BUILDX_LOCAL_CACHE}} && mv {{.BUILDX_LOCAL_CACHE_NEW}} {{.BUILDX_LOCAL_CACHE}}
+
+  docker:release:
+    desc: Build + push image
+    cmds:
+      - task: frontend:build
+      - mkdir -p {{.BUILDX_LOCAL_CACHE}}
+      - rm -rf {{.BUILDX_LOCAL_CACHE_NEW}}
+      - docker buildx build --builder {{.BUILDX_BUILDER}} --platform linux/amd64 --push --cache-from=type=local,src={{.BUILDX_LOCAL_CACHE}} --cache-to=type=local,dest={{.BUILDX_LOCAL_CACHE_NEW}},mode=max -f Dockerfile -t {{.IMAGE}}:{{.GIT_HASH}} -t {{.IMAGE}}:latest .
+      - rm -rf {{.BUILDX_LOCAL_CACHE}} && mv {{.BUILDX_LOCAL_CACHE_NEW}} {{.BUILDX_LOCAL_CACHE}}
+
+  docker:k8s-secret:
+    desc: Create/refresh dockerhub-creds pull secret in the cluster from local Docker credentials
+    cmd: |
+      kubectl create secret generic dockerhub-creds \
+        --from-file=.dockerconfigjson=$HOME/.docker/config.json \
+        --type=kubernetes.io/dockerconfigjson \
+        --namespace={{.NAMESPACE}} \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+  ship:
+    desc: Build + push image, then deploy
+    cmds:
+      - task: frontend:install
+      - task: docker:release
+      - task: deploy
+
+  # ── Helm / Kubernetes ───────────────────────────────────────────────────────
+
+  deploy:
+    desc: Install or upgrade the release (idempotent), pinned to current git hash
+    cmd: helm upgrade --install {{.RELEASE}} {{.CHART}} --namespace {{.NAMESPACE}} --create-namespace --set image.tag={{.GIT_HASH}}
+
+  uninstall:
+    desc: Uninstall the release (keeps the namespace and PVC)
+    cmd: helm uninstall {{.RELEASE}} --namespace {{.NAMESPACE}}
+
+  lint:
+    desc: Lint the chart
+    cmd: helm lint {{.CHART}}
+
+  template:
+    desc: Render templates locally without deploying
+    cmd: helm template {{.RELEASE}} {{.CHART}} --namespace {{.NAMESPACE}}
+
+  status:
+    desc: Show release status
+    cmd: helm status {{.RELEASE}} --namespace {{.NAMESPACE}}
+
+  diff:
+    desc: Show diff between deployed and local chart (requires helm-diff plugin)
+    cmd: helm diff upgrade {{.RELEASE}} {{.CHART}} --namespace {{.NAMESPACE}}
+
+  history:
+    desc: Show release history
+    cmd: helm history {{.RELEASE}} --namespace {{.NAMESPACE}}
+
+  rollback:
+    desc: Rollback to previous revision
+    cmd: helm rollback {{.RELEASE}} --namespace {{.NAMESPACE}}
+
+  logs:
+    desc: Tail logs from the running pod
+    cmd: kubectl logs -n {{.NAMESPACE}} -l app.kubernetes.io/name=pro-jection -f --tail=200

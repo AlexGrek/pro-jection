@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('tailwindcss:',p.dependencies?.tailwindcss||p.devDependencies?.tailwindcss\\); console.log\\('@tailwindcss/vite:',p.dependencies?.['@tailwindcss/vite']||p.devDependencies?.['@tailwindcss/vite']\\)\")",
+      "Bash(command -v task)",
+      "Bash(task --list-all)",
+      "Bash(command -v cargo)",
+      "Bash(command -v node)",
+      "Bash(command -v npm)",
+      "Bash(task dev *)",
+      "Bash(curl -sf -o /dev/null http://localhost:8080/live)",
+      "Bash(curl -sf -o /dev/null http://localhost:5173/)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

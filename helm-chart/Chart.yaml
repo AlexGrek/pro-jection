@@ -1,0 +1,6 @@
+apiVersion: v2
+name: pro-jection
+description: Helm chart for pro-jection — single stateful pod with OpenDAL fs storage
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
