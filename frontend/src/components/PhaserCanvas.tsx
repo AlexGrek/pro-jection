@@ -83,7 +83,7 @@ export const PhaserCanvas = forwardRef<PhaserCanvasHandle, Props>(
       }
     }, [editable])
 
-    return <div ref={containerRef} className={className} style={{ lineHeight: 0 }} />
+    return <div ref={containerRef} className={className} style={{ lineHeight: 0, touchAction: 'none' }} />
   },
 )
 PhaserCanvas.displayName = 'PhaserCanvas'

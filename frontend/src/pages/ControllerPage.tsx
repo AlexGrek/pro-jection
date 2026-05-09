@@ -20,6 +20,8 @@ const STATUS_STYLES: Record<ConnState, string> = {
   error: 'bg-red-900/50 text-red-400',
 }
 
+const TEXT_DEBOUNCE_MS = 350
+
 function layerLabel(layer: Layer): string {
   if (layer.type === 'text') return layer.text || '(empty)'
   return layer.type
@@ -41,14 +43,41 @@ export function ControllerPage() {
   const wsRef = useRef<WebSocket | null>(null)
   const canvasRef = useRef<PhaserCanvasHandle>(null)
   const logRef = useRef<HTMLDivElement>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Mirrors `objects` so commit handlers (slider release, color blur) always read fresh state.
+  const objectsRef = useRef<Layer[]>(objects)
+  useEffect(() => { objectsRef.current = objects }, [objects])
 
   const selected = objects.find((o) => o.id === selectedId) ?? null
 
+  // ── Local sync: state + canvas. Never touches WebSocket. ──────────────────
   const applyObjects = useCallback((next: Layer[]) => {
     setObjects(next)
     canvasRef.current?.applyScene({ objects: next })
   }, [])
 
+  // ── Send: full scene every time. Caller decides when to commit. ───────────
+  const sendNow = useCallback((next: Layer[]) => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+      debounceRef.current = null
+    }
+    const scene: Scene = { objects: next }
+    wsRef.current.send(JSON.stringify(scene))
+    setLog((prev) => [...prev, scene])
+  }, [])
+
+  const sendDebounced = useCallback((next: Layer[]) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => sendNow(next), TEXT_DEBOUNCE_MS)
+  }, [sendNow])
+
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+  }, [])
+
+  // ── Connection ────────────────────────────────────────────────────────────
   const connect = useCallback(() => {
     wsRef.current?.close()
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -62,14 +91,12 @@ export function ControllerPage() {
     ws.onmessage = (e) => {
       const data: ServerEvent | Scene = JSON.parse(e.data)
       if ('type' in data) {
-        // Server control event
         if (data.type === 'error') {
           setErrorMsg(data.message)
           setConnState('error')
         }
-        // 'connected' and 'controller_status' need no action here
       } else {
-        // Raw scene replayed on reconnect — restore canvas state.
+        // Raw scene replayed on reconnect — restore local state without re-broadcasting.
         applyObjects((data as Scene).objects)
       }
     }
@@ -86,20 +113,25 @@ export function ControllerPage() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [log])
 
+  // ── Drag from canvas: state updates locally, send fires on drag-end. ──────
   const onPositionChange = useCallback((id: string, x: number, y: number) => {
-    setObjects((prev) => prev.map((o) => (o.id === id ? { ...o, x, y } : o)))
-  }, [])
+    const next = objectsRef.current.map((o) => (o.id === id ? { ...o, x, y } : o))
+    applyObjects(next)
+    sendNow(next)
+  }, [applyObjects, sendNow])
 
   const onObjectSelect = useCallback((id: string) => {
     setSelectedId(id)
   }, [])
 
-  const patchSelected = (patch: Partial<Omit<TextLayer, 'id' | 'type'>>) => {
-    if (!selectedId) return
-    const next = objects.map((o) =>
+  // Returns the new objects array so callers can decide how/when to send.
+  const patchSelected = (patch: Partial<Omit<TextLayer, 'id' | 'type'>>): Layer[] => {
+    if (!selectedId) return objectsRef.current
+    const next = objectsRef.current.map((o) =>
       o.id === selectedId && o.type === 'text' ? { ...o, ...patch } : o,
     )
     applyObjects(next)
+    return next
   }
 
   const selectLayer = (id: string) => {
@@ -110,23 +142,12 @@ export function ControllerPage() {
   const addTextObject = () => {
     const id = crypto.randomUUID()
     const newLayer: TextLayer = { ...DEFAULT_TEXT_LAYER, id }
-    const next = [...objects, newLayer]
+    const next = [...objectsRef.current, newLayer]
     applyObjects(next)
     setSelectedId(id)
     canvasRef.current?.selectObject(id)
+    sendNow(next)
   }
-
-  const sendMessage = () => {
-    if (wsRef.current?.readyState !== WebSocket.OPEN) return
-    if (!objects.some((o) => o.type === 'text' && (o as TextLayer).text.trim())) return
-    const scene: Scene = { objects }
-    wsRef.current.send(JSON.stringify(scene))
-    setLog((prev) => [...prev, scene])
-  }
-
-  const canSend =
-    connState === 'connected' &&
-    objects.some((o) => o.type === 'text' && (o as TextLayer).text.trim().length > 0)
 
   return (
     <main className="h-screen flex flex-col bg-linear-to-br from-slate-950 to-blue-950 overflow-hidden">
@@ -236,20 +257,21 @@ export function ControllerPage() {
             </div>
             {selected && selected.type === 'text' ? (
               <div className="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col gap-2.5">
+                {/* Text — debounced send */}
                 <Input
                   value={selected.text}
-                  onChange={(e) => patchSelected({ text: e.target.value })}
-                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                  onChange={(e) => sendDebounced(patchSelected({ text: e.target.value }))}
                   placeholder="Text…"
                   disabled={connState !== 'connected'}
                   className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600 font-light text-xs h-7 px-2"
                 />
 
+                {/* Font — immediate send */}
                 <div className="flex items-center gap-2">
                   <span className="text-slate-500 text-[10px] w-10 shrink-0">Font</span>
                   <select
                     value={selected.font_family}
-                    onChange={(e) => patchSelected({ font_family: e.target.value as FontId })}
+                    onChange={(e) => sendNow(patchSelected({ font_family: e.target.value as FontId }))}
                     disabled={connState !== 'connected'}
                     className="flex-1 bg-slate-900 border border-slate-700 text-white text-[10px] rounded h-7 px-1.5 disabled:opacity-40"
                   >
@@ -259,6 +281,7 @@ export function ControllerPage() {
                   </select>
                 </div>
 
+                {/* Size — preview while dragging, send on release */}
                 <div className="flex items-center gap-2">
                   <span className="text-slate-500 text-[10px] w-10 shrink-0">Size</span>
                   <input
@@ -267,18 +290,22 @@ export function ControllerPage() {
                     max={200}
                     value={selected.font_size}
                     onChange={(e) => patchSelected({ font_size: Number(e.target.value) })}
+                    onPointerUp={() => sendNow(objectsRef.current)}
+                    onKeyUp={() => sendNow(objectsRef.current)}
                     disabled={connState !== 'connected'}
-                    className="flex-1 accent-blue-500"
+                    className="flex-1 accent-blue-500 touch-none"
                   />
                   <span className="text-slate-400 text-[10px] w-7 text-right shrink-0">{selected.font_size}</span>
                 </div>
 
+                {/* Color — preview on input, send on commit (picker close / blur) */}
                 <div className="flex items-center gap-2">
                   <span className="text-slate-500 text-[10px] w-10 shrink-0">Color</span>
                   <input
                     type="color"
                     value={selected.color}
                     onChange={(e) => patchSelected({ color: e.target.value })}
+                    onBlur={() => sendNow(objectsRef.current)}
                     disabled={connState !== 'connected'}
                     className="w-7 h-6 rounded cursor-pointer border border-slate-700 bg-transparent disabled:opacity-40"
                   />
@@ -290,33 +317,12 @@ export function ControllerPage() {
                     {selected.x.toFixed(2)}, {selected.y.toFixed(2)}
                   </span>
                 </div>
-
-                <div className="mt-auto">
-                  <Button
-                    onClick={sendMessage}
-                    disabled={!canSend}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40 h-7 text-xs gap-1.5"
-                  >
-                    <IconSend size={13} stroke={1.5} />
-                    Send
-                  </Button>
-                </div>
               </div>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center gap-3 p-4">
                 <p className="text-slate-600 text-xs text-center font-light">
                   {objects.length === 0 ? 'Add a layer to get started.' : 'Select a layer to edit.'}
                 </p>
-                {objects.length > 0 && (
-                  <Button
-                    onClick={sendMessage}
-                    disabled={!canSend}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40 h-7 text-xs gap-1.5"
-                  >
-                    <IconSend size={13} stroke={1.5} />
-                    Send
-                  </Button>
-                )}
               </div>
             )}
           </div>
