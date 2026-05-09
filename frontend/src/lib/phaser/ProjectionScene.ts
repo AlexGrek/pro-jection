@@ -1,16 +1,22 @@
 import Phaser from 'phaser'
 import type { Layer, Scene, TextLayer } from '@/lib/scene'
+import { DEFAULT_FONT_ID, FONT_CSS } from '@/lib/scene'
 
 export { type Layer, type Scene } from '@/lib/scene'
 
 export const CANVAS_W = 1920
 export const CANVAS_H = 1080
-const FONT = '"Outfit Variable", "Outfit", system-ui, sans-serif'
+const HINT_FONT = '"Outfit Variable", "Outfit", system-ui, sans-serif'
+
+function fontCss(layer: TextLayer): string {
+  return FONT_CSS[layer.font_family ?? DEFAULT_FONT_ID] ?? FONT_CSS[DEFAULT_FONT_ID]
+}
 
 export class ProjectionScene extends Phaser.Scene {
   editable = false
   onPositionChange?: (id: string, x: number, y: number) => void
   onObjectSelect?: (id: string) => void
+  onSceneReady?: (scene: ProjectionScene) => void
 
   private gameObjects = new Map<string, Phaser.GameObjects.Text>()
   private layerData = new Map<string, Layer>()
@@ -25,13 +31,14 @@ export class ProjectionScene extends Phaser.Scene {
     if (this.editable) {
       this.hint = this.add
         .text(CANVAS_W / 2, CANVAS_H / 2, 'Add objects in the panel below', {
-          fontFamily: FONT,
+          fontFamily: HINT_FONT,
           fontSize: '48px',
           color: '#1e293b',
           align: 'center',
         })
         .setOrigin(0.5)
     }
+    this.onSceneReady?.(this)
   }
 
   applyScene(scene: Scene) {
@@ -71,10 +78,11 @@ export class ProjectionScene extends Phaser.Scene {
       existing.setPosition(px, py)
       existing.setFontSize(layer.font_size)
       existing.setColor(layer.color)
+      existing.setFontFamily(fontCss(layer))
     } else {
       const t = this.add
         .text(px, py, layer.text, {
-          fontFamily: FONT,
+          fontFamily: fontCss(layer),
           fontSize: `${layer.font_size}px`,
           color: layer.color,
           wordWrap: { width: CANVAS_W - 160 },

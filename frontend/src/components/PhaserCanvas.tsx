@@ -55,6 +55,13 @@ export const PhaserCanvas = forwardRef<PhaserCanvasHandle, Props>(
       scene.editable = editable
       scene.onPositionChange = (id, x, y) => cbPositionRef.current?.(id, x, y)
       scene.onObjectSelect = (id) => cbSelectRef.current?.(id)
+      scene.onSceneReady = (s) => {
+        sceneRef.current = s
+        if (pendingRef.current) {
+          s.applyScene(pendingRef.current)
+          pendingRef.current = null
+        }
+      }
 
       const game = new Phaser.Game({
         type: Phaser.AUTO,
@@ -68,15 +75,6 @@ export const PhaserCanvas = forwardRef<PhaserCanvasHandle, Props>(
           height: CANVAS_H,
         },
         audio: { noAudio: true },
-      })
-
-      game.events.once('ready', () => {
-        const s = game.scene.getScene('ProjectionScene') as ProjectionScene
-        sceneRef.current = s
-        if (pendingRef.current) {
-          s.applyScene(pendingRef.current)
-          pendingRef.current = null
-        }
       })
 
       return () => {

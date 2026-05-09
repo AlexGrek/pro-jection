@@ -20,8 +20,11 @@ Sessions (controller ↔ projector pairs) live in server RAM only and are never 
   - `GET /ready` — readiness, probes OpenDAL backend
   - `GET /health` — JSON health summary
   - `GET /ws/echo` — WebSocket echo for manual testing ([ws_test.rs](backend/src/routes/ws_test.rs))
-  - `GET /ws/controller/{code}` — WebSocket: controller slot for session `code` ([sessions.rs](backend/src/routes/sessions.rs))
-  - `GET /ws/projector/{code}` — WebSocket: projector subscriber for session `code` ([sessions.rs](backend/src/routes/sessions.rs))
+  - `GET /ws/controller/{code}` — WebSocket: exclusive controller slot ([sessions.rs](backend/src/routes/sessions.rs))
+  - `GET /ws/projector/{code}` — WebSocket: projector subscriber ([sessions.rs](backend/src/routes/sessions.rs))
+  - `GET /api/sessions/{code}/history` — full history array + cursor ([history.rs](backend/src/routes/history.rs))
+  - `POST /api/sessions/{code}/history/undo` — step cursor back, broadcast ([history.rs](backend/src/routes/history.rs))
+  - `POST /api/sessions/{code}/history/redo` — step cursor forward, broadcast ([history.rs](backend/src/routes/history.rs))
   - `/assets/*` → ServeDir (no fallback, so a missing hashed chunk 404s cleanly)
   - everything else → SPA fallback to `index.html`
 - Env vars (with defaults): `HOST=0.0.0.0`, `PORT=8080`, `STORAGE_CONFIG=config/storage.yaml`, `STATIC_DIR=../frontend/dist`, `CORS_ALLOWED_ORIGINS=` (comma-separated).
@@ -29,54 +32,78 @@ Sessions (controller ↔ projector pairs) live in server RAM only and are never 
 
 ## Session system
 
-- [session.rs](backend/src/session.rs) — `SessionState` (message log, `controller_connected` bool, `projector_count`, `last_disconnect: Option<Instant>`, `tx: broadcast::Sender<String>`). `SessionStore = Arc<Mutex<HashMap<String, SessionState>>>`.
-- [routes/sessions.rs](backend/src/routes/sessions.rs) — WS handlers. Controller slot is exclusive: if `session.controller_connected` is already true the new connection receives `{"type":"error"}` and is closed immediately. Projectors subscribe to the broadcast channel and receive all events via `tokio::select!`. New messages are stored in `session.messages` and broadcast as pre-serialized JSON strings.
+- [session.rs](backend/src/session.rs) — `SessionState` holds `history: Vec<String>` (raw scene JSON blobs), `cursor: usize`, `controller_connected` bool, `projector_count`, `last_disconnect: Option<Instant>`, `tx: broadcast::Sender<String>`. Helper methods: `push(scene)` appends and advances cursor (truncating redo history), `current()` returns the scene at the cursor.
+- [routes/sessions.rs](backend/src/routes/sessions.rs) — WS handlers. Controller slot is exclusive: second controller gets `{"type":"error"}` and is closed. On any text frame from the controller, `session.push(raw)` is called and the raw string is broadcast to projectors — **no JSON parsing**. Late-joining clients receive `session.current()` replayed verbatim.
+- [routes/history.rs](backend/src/routes/history.rs) — HTTP undo/redo. Moves the cursor and broadcasts the scene at the new position. Responses embed raw scene blobs via string formatting, no serialisation round-trip. See [history.md](history.md) for full behaviour.
 - `AppState.sessions` is the shared store; it is cloned (Arc clone) for the cleanup task.
 - Cleanup task (spawned from `main.rs`): runs every 60 s, retains sessions that have active clients OR whose `last_disconnect` is less than 10 minutes ago.
 
-### WebSocket events (server → client, JSON)
+### WebSocket protocol
+
+**Server → client** (typed JSON events):
 
 | `type` | Fields | When |
 |---|---|---|
 | `connected` | `role`, `session_code` | On handshake |
-| `history` | `messages[]` | Backfill on connect |
-| `display` | `text`, `timestamp` | New message from controller |
 | `controller_status` | `connected` bool | Controller connects/disconnects |
-| `error` | `message` | Rejected connection |
+| `error` | `message` | Connection rejected (e.g. duplicate controller) |
 
-Controller sends: `{"type":"send","text":"..."}`. Projectors are receive-only.
+**Controller → server → projectors** (raw scene blob, no envelope):
+
+The controller sends the full scene JSON directly. The server stores it and broadcasts it verbatim to all projectors. There is no type wrapper added by the server.
+
+```json
+{ "objects": [ { "id": "…", "type": "text", "x": 0.5, "y": 0.3, … } ] }
+```
+
+Clients distinguish server events from scene updates by checking for a known `type` field.
 
 ## Frontend
 
 - Pages: [App.tsx](frontend/src/App.tsx) routes:
-  - `/` → [HomePage.tsx](frontend/src/pages/HomePage.tsx) — mode picker (Controller / Projector) + 6-digit `CodeInput` dialog; navigates to `/{mode}/{code}`.
-  - `/controller/:code` → [ControllerPage.tsx](frontend/src/pages/ControllerPage.tsx) — connects to `/ws/controller/:code`. Hosts a Phaser canvas (editable: text draggable) + font-size slider + color picker. Sends `{type,text,x,y,font_size,color}` on Enter/button. Compact history below canvas.
-  - `/projector/:code` → [ProjectorPage.tsx](frontend/src/pages/ProjectorPage.tsx) — connects to `/ws/projector/:code`. Full-screen Phaser canvas (view-only). Auto-reconnects every 3 s. Double-click returns home.
+  - `/` → [HomePage.tsx](frontend/src/pages/HomePage.tsx) — mode picker + 6-digit `CodeInput` dialog.
+  - `/controller/:code` → [ControllerPage.tsx](frontend/src/pages/ControllerPage.tsx) — two-row layout: top row is Phaser canvas + layers panel; bottom row is properties panel + log + add-object panel. Sends raw scene JSON on Send / Enter. Maintains local log (not persisted by server).
+  - `/projector/:code` → [ProjectorPage.tsx](frontend/src/pages/ProjectorPage.tsx) — full-screen Phaser canvas (view-only). Auto-reconnects every 3 s. Double-click returns home.
   - `/health` → [HealthPage.tsx](frontend/src/pages/HealthPage.tsx)
   - `/ws-test` → [WsTestPage.tsx](frontend/src/pages/WsTestPage.tsx)
-- Vite dev server proxies `/health`, `/live`, `/ready`, `/ws` → backend on `localhost:8080` ([vite.config.ts](frontend/vite.config.ts)). The `/ws` prefix covers both `/ws/controller/*` and `/ws/projector/*`.
+- Vite dev server proxies `/health`, `/live`, `/ready`, `/ws`, `/api` → backend on `localhost:8080` ([vite.config.ts](frontend/vite.config.ts)).
 - Tailwind: write classes directly in JSX. No config file by design — extend via CSS in [index.css](frontend/src/index.css) using `@theme` if needed.
 
-## Phaser integration
+## Scene type system
 
-- Scene: [ProjectionScene.ts](frontend/src/lib/phaser/ProjectionScene.ts) — 1920×1080 canvas, one `Phaser.GameObjects.Text` object. In `editable` mode the text is interactive and draggable; drag-end fires `onPositionChange(x, y)` (normalized 0–1). `applySlide(patch)` updates text, position, font size, and color. Shows a dim placeholder hint when `text` is empty and `editable = true`.
-- Wrapper: [PhaserCanvas.tsx](frontend/src/components/PhaserCanvas.tsx) — `forwardRef` component; exposes `applySlide` / `getSlide` via handle. Buffers `applySlide` calls that arrive before the game is ready (`pendingRef`). Callback ref pattern keeps `onPositionChange` fresh without recreating the game. Passes `audio: { noAudio: true }` to suppress AudioContext warnings.
-- `Phaser.Scale.FIT + CENTER_BOTH` — canvas scales to fit its container while holding 16:9. Container sizing (16:9 `aspect-ratio` on controller, `w-screen h-screen` on projector) controls how large it renders.
-- Font: `"Outfit Variable"` (already loaded via `@fontsource-variable/outfit` in [index.css](frontend/src/index.css)).
-
-## Slide data model (frontend ↔ backend)
+Canonical types live in [frontend/src/lib/scene.ts](frontend/src/lib/scene.ts). The JSON wire format uses snake_case to match the Rust backend conventions.
 
 ```typescript
-interface SlideData {
+interface Animations {}          // always {} — extensible placeholder
+
+interface TextLayer extends BaseLayer {
+  type: 'text'
   text: string
-  x: number       // 0–1 normalized horizontal position
-  y: number       // 0–1 normalized vertical position
-  fontSize: number // canvas pixels in 1920×1080 coordinate space (default 96)
-  color: string   // #rrggbb (default #ffffff)
+  font_size: number              // canvas pixels in 1920×1080 space
+  color: string                  // #rrggbb
+}
+
+type Layer = TextLayer           // union grows as new types are added
+
+interface Scene {
+  objects: Layer[]               // ordered layer list
 }
 ```
 
-Backend field name is `font_size` (snake_case); frontend converts on read (`last.font_size`) and write (`font_size: slide.fontSize`). Serde defaults in `StoredMessage` ensure old messages without these fields still deserialize correctly.
+`BaseLayer` carries `id`, `x` (0–1), `y` (0–1), `animations`. The backend never inspects layer content.
+
+## Phaser integration
+
+- Scene: [ProjectionScene.ts](frontend/src/lib/phaser/ProjectionScene.ts) — 1920×1080 canvas. Maintains a `Map<id, Phaser.GameObjects.Text>` and a `Map<id, Layer>`. `applyScene(scene)` diffs the current objects against the new list, creating/updating/destroying Phaser objects as needed. In `editable` mode each text object is draggable; drag-end fires `onPositionChange(id, x, y)`. Clicking a text fires `onObjectSelect(id)`. `selectObject(id)` applies a blue stroke to the selected object.
+- Wrapper: [PhaserCanvas.tsx](frontend/src/components/PhaserCanvas.tsx) — `forwardRef` component. Handle: `applyScene(scene)`, `selectObject(id | null)`, `getScene()`. Buffers calls that arrive before the game is ready (`pendingRef`). Callback refs keep `onPositionChange` / `onObjectSelect` fresh without recreating the game.
+- `Phaser.Scale.FIT + CENTER_BOTH` — canvas scales to fill its container while holding 16:9. The black background hides any letterbox bars.
+- Font: `"Outfit Variable"` (loaded via `@fontsource-variable/outfit` in [index.css](frontend/src/index.css)).
+
+## History API
+
+See [history.md](history.md) for the full cursor model, truncation-on-send behaviour, endpoint contracts, and frontend integration notes.
+
+Summary: `GET /api/sessions/{code}/history` returns the full stack and cursor; `POST …/undo` and `POST …/redo` move the cursor and broadcast the scene at the new position to projectors. The controller applies the returned scene to its own canvas from the HTTP response body.
 
 ## Deployment
 
@@ -100,8 +127,10 @@ Backend field name is `font_size` (snake_case); frontend converts on read (`last
 - Single crate at [backend/](backend/) — don't split into a workspace until there's a real second binary.
 - Don't add a database or auth without explicit ask. The whole design assumes one stateful pod owning its PVC.
 - Sessions are RAM-only by design. Don't persist them to the OpenDAL storage without explicit ask.
+- The backend is a dumb relay for scene data — it never parses scene JSON. Keep it that way.
 - Tailwind v4 only — never reintroduce `tailwind.config.js` or PostCSS configs (the Vite plugin handles everything).
 - React Router stays in **library mode** (`react-router-dom` `BrowserRouter`). Don't migrate to the framework/data-router setup.
 - The projector page auto-reconnects; the controller page does not (manual reconnect button only, to surface the "already connected" error clearly).
-- Phaser game instances are owned by `PhaserCanvas` and destroyed on unmount. Never call `game.destroy()` from outside the component. Communicate with the scene exclusively through the `PhaserCanvasHandle` ref (`applySlide`, `getSlide`).
+- Phaser game instances are owned by `PhaserCanvas` and destroyed on unmount. Never call `game.destroy()` from outside the component. Communicate with the scene exclusively through `PhaserCanvasHandle` (`applyScene`, `selectObject`, `getScene`).
 - Don't add Phaser audio, physics, or asset loaders — the scene is text-only by design.
+- The Vite proxy must cover `/api` as well as `/ws` and `/health` paths.

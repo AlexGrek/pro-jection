@@ -15,7 +15,8 @@
  *       "animations": {},
  *       "text": "Hello",
  *       "font_size": 96,
- *       "color": "#ffffff"
+ *       "color": "#ffffff",
+ *       "font_family": "outfit"
  *     }
  *   ]
  * }
@@ -36,6 +37,28 @@ export interface BaseLayer {
   animations: Animations
 }
 
+// ── Font catalogue ───────────────────────────────────────────────────────────
+
+export const FONT_OPTIONS = [
+  { id: 'outfit',        label: 'Outfit',           css: '"Outfit Variable", "Outfit", sans-serif' },
+  { id: 'inter',         label: 'Inter',             css: '"Inter Variable", "Inter", sans-serif' },
+  { id: 'space-grotesk', label: 'Space Grotesk',     css: '"Space Grotesk Variable", "Space Grotesk", sans-serif' },
+  { id: 'playfair',      label: 'Playfair Display',  css: '"Playfair Display Variable", "Playfair Display", serif' },
+  { id: 'space-mono',    label: 'Space Mono',        css: '"Space Mono", monospace' },
+  { id: 'bebas-neue',    label: 'Bebas Neue',        css: '"Bebas Neue", sans-serif' },
+  { id: 'dancing-script',label: 'Dancing Script',    css: '"Dancing Script Variable", "Dancing Script", cursive' },
+] as const
+
+export type FontId = typeof FONT_OPTIONS[number]['id']
+
+export const DEFAULT_FONT_ID: FontId = 'outfit'
+
+export const FONT_CSS: Record<FontId, string> = Object.fromEntries(
+  FONT_OPTIONS.map((f) => [f.id, f.css]),
+) as Record<FontId, string>
+
+// ── Layer types ──────────────────────────────────────────────────────────────
+
 /** A text layer. Matches `TextLayer` in the Rust backend. */
 export interface TextLayer extends BaseLayer {
   type: 'text'
@@ -44,6 +67,8 @@ export interface TextLayer extends BaseLayer {
   font_size: number
   /** Text color as #rrggbb. */
   color: string
+  /** Font family id from FONT_OPTIONS. Absent in old scenes → defaults to 'outfit'. */
+  font_family: FontId
 }
 
 /** Union of all known layer types. Grows as new types are added. */
@@ -65,6 +90,7 @@ export const DEFAULT_TEXT_LAYER: Omit<TextLayer, 'id'> = {
   y: 0.5,
   font_size: 96,
   color: '#ffffff',
+  font_family: DEFAULT_FONT_ID,
   animations: DEFAULT_ANIMATIONS,
 }
 

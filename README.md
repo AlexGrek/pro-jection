@@ -1,13 +1,13 @@
 # pro-jection
 
-Wireless slide projector control over WebSocket. A controller screen sends text messages; a projector screen displays them full-screen in real time. Sessions are identified by a 6-digit numeric code and managed entirely in server RAM — no database.
+Wireless slide projector control over WebSocket. A controller screen composes a scene of text layers and sends it; one or more projector screens display it full-screen in real time. Sessions are identified by a 6-digit numeric code and managed entirely in server RAM — no database.
 
 ## How it works
 
 1. Open the app on two devices (or two browser tabs).
 2. Pick **Controller** on one, enter any 6-digit code.
 3. Pick **Projector** on the other, enter the same code.
-4. Type a message on the controller and press Enter — it appears on the projector instantly.
+4. Compose a scene on the controller and press Send — it appears on the projector instantly.
 
 Sessions are created on first connect and survive client disconnects. They are cleaned up automatically after all clients have been gone for 10 minutes.
 
@@ -18,7 +18,7 @@ Sessions are created on first connect and survive client disconnects. They are c
 | Code format | 6 digits, user-chosen |
 | Controllers per session | **1** — a second controller is rejected with an error message |
 | Projectors per session | Unlimited |
-| State kept | Full message log + last message with timestamp |
+| State kept | Full scene history with undo/redo cursor |
 | Persistence | RAM only; lost on pod restart |
 | Cleanup | Removed 10 min after last client disconnects |
 
@@ -31,37 +31,67 @@ ws://<host>/ws/controller/<code>
 ws://<host>/ws/projector/<code>
 ```
 
-### Slide data
-
-Each `display` event and `history` message carries the full slide state:
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `text` | string | — | Message text |
-| `x` | number | `0.5` | Horizontal position, 0–1 (left to right) |
-| `y` | number | `0.5` | Vertical position, 0–1 (top to bottom) |
-| `font_size` | number | `96` | Font size in 1920×1080 canvas pixels |
-| `color` | string | `#ffffff` | Text color (hex) |
-
-The controller sends these fields with each `send` message. The Phaser canvas on both sides operates in 1920×1080 logical pixels and scales via `Phaser.Scale.FIT` to fit the viewport.
-
-### Server → client (JSON, tagged by `type`)
+### Server → client events (typed JSON)
 
 | `type` | Fields | Sent when |
 |---|---|---|
 | `connected` | `role`, `session_code` | On successful handshake |
-| `history` | `messages[]` (`text`, `timestamp`) | After `connected`, backfills existing messages |
-| `display` | `text`, `timestamp` | Controller sends a new message |
 | `controller_status` | `connected` (bool) | Controller connects or disconnects |
 | `error` | `message` | Connection refused (e.g. duplicate controller) |
 
-### Client → server (controller only)
+On connect, clients also receive the last scene the controller sent (replayed verbatim, no wrapper).
+
+### Controller → server → projectors
+
+The controller sends the full scene JSON directly — no envelope. The server stores it, appends it to history, and broadcasts it to all projectors unchanged:
 
 ```json
-{ "type": "send", "text": "Hello, world", "x": 0.5, "y": 0.3, "font_size": 96, "color": "#ffffff" }
+{
+  "objects": [
+    {
+      "id": "abc",
+      "type": "text",
+      "x": 0.5,
+      "y": 0.3,
+      "font_size": 96,
+      "color": "#ffffff",
+      "text": "Hello, world",
+      "animations": {}
+    }
+  ]
+}
 ```
 
-All fields except `type` and `text` are optional; the server fills defaults. Projectors are receive-only.
+Clients distinguish server events from scene updates by checking for a known `type` field.
+
+## Scene type system
+
+Each scene is an ordered array of layers. Current layer types:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Client-generated unique identifier |
+| `type` | `"text"` | Layer discriminator |
+| `x` | number | Horizontal position, 0–1 (left to right) |
+| `y` | number | Vertical position, 0–1 (top to bottom) |
+| `font_size` | number | Font size in 1920×1080 canvas pixels (default 96) |
+| `color` | string | Text color (hex, default `#ffffff`) |
+| `text` | string | Display text |
+| `animations` | object | Always `{}` — reserved for future use |
+
+The Phaser canvas on both sides operates in 1920×1080 logical pixels and scales via `Phaser.Scale.FIT` to fill the viewport.
+
+## History & undo/redo
+
+Every scene the controller sends is appended to a server-side history stack. The controller can step backwards (undo) and forwards (redo) via HTTP. Moving the cursor broadcasts the scene at the new position to all connected projectors.
+
+See [history.md](history.md) for the full cursor model, truncation behaviour, and endpoint contracts.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/sessions/{code}/history` | GET | Full history array + current cursor |
+| `/api/sessions/{code}/history/undo` | POST | Step cursor back; returns new scene |
+| `/api/sessions/{code}/history/redo` | POST | Step cursor forward; returns new scene |
 
 ## Stack
 
@@ -78,7 +108,7 @@ All fields except `type` and `text` are optional; the server fills defaults. Pro
 task dev          # starts backend :8080 and Vite :5173 in parallel
 ```
 
-Open `http://localhost:5173`. The Vite dev server proxies all `/ws/*` and `/health` paths to the backend.
+Open `http://localhost:5173`. The Vite dev server proxies `/ws/*`, `/api/*`, and `/health` paths to the backend.
 
 ## Project layout
 
@@ -88,32 +118,35 @@ backend/
     main.rs          # entry point, starts cleanup task
     app.rs           # axum router
     config.rs        # env vars
-    session.rs       # SessionState, SessionStore, ServerEvent
+    session.rs       # SessionState, history stack, ServerEvent
     state.rs         # AppState (config + storage + sessions)
     storage.rs       # OpenDAL operator loader
     routes/
       health.rs      # /live, /ready, /health
       sessions.rs    # /ws/controller/:code, /ws/projector/:code
+      history.rs     # /api/sessions/:code/history (undo/redo)
       ws_test.rs     # /ws/echo (echo test)
 frontend/
   src/
     App.tsx          # routes
+    lib/
+      scene.ts            # canonical Scene / Layer / TextLayer types (wire format)
+      phaser/
+        ProjectionScene.ts  # multi-object 1920×1080 scene, drag support, selection
     pages/
       HomePage.tsx        # mode picker + 6-digit code dialog
-      ControllerPage.tsx  # WS client, editable Phaser canvas, style controls, history
-      ProjectorPage.tsx   # WS client, full-screen Phaser canvas, auto-reconnect
+      ControllerPage.tsx  # WS client, two-row editor layout, layers/props panels
+      ProjectorPage.tsx   # WS client, full-screen canvas, auto-reconnect
       HealthPage.tsx      # /health viewer
       WsTestPage.tsx      # /ws/echo tester
     components/
-      PhaserCanvas.tsx    # forwardRef wrapper: creates/destroys Phaser.Game, exposes applySlide/getSlide
+      PhaserCanvas.tsx    # forwardRef wrapper: applyScene / selectObject / getScene
       CodeInput.tsx       # 6-digit entry dialog
       ui/                 # button, card, dialog, input
-    lib/
-      phaser/
-        ProjectionScene.ts  # Phaser.Scene: 1920×1080 text canvas, drag support, applySlide()
 helm-chart/          # StatefulSet + PVC + two Ingresses + storage ConfigMap
 Dockerfile           # two-stage: host builds frontend, image copies dist/
 Taskfile.yml         # dev, build, ship, logs
+history.md           # undo/redo cursor model and HTTP API reference
 ```
 
 ## Deployment

@@ -118,6 +118,11 @@ tasks:
       - task: frontend:install
       - task: docker:release
       - task: deploy
+      - cmd: |
+          echo ""
+          echo "==> Live at:"
+          kubectl get ingress -n {{.NAMESPACE}} \
+            -o jsonpath='{range .items[*].spec.rules[*]}{"  https://"}{.host}{"\n"}{end}' | sort -u
 
   # ── Helm / Kubernetes ───────────────────────────────────────────────────────
 

@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { IconDeviceGamepad2, IconArrowLeft, IconSend, IconRefresh, IconLetterT } from '@tabler/icons-react'
+import { IconDeviceGamepad2, IconArrowLeft, IconRefresh, IconLetterT } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PhaserCanvas, type PhaserCanvasHandle } from '@/components/PhaserCanvas'
-import { DEFAULT_TEXT_LAYER, type Layer, type Scene, type TextLayer } from '@/lib/scene'
+import { DEFAULT_TEXT_LAYER, FONT_OPTIONS, type FontId, type Layer, type Scene, type TextLayer } from '@/lib/scene'
 
 type ConnState = 'connecting' | 'connected' | 'disconnected' | 'error'
 
@@ -244,6 +244,20 @@ export function ControllerPage() {
                   disabled={connState !== 'connected'}
                   className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600 font-light text-xs h-7 px-2"
                 />
+
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500 text-[10px] w-10 shrink-0">Font</span>
+                  <select
+                    value={selected.font_family}
+                    onChange={(e) => patchSelected({ font_family: e.target.value as FontId })}
+                    disabled={connState !== 'connected'}
+                    className="flex-1 bg-slate-900 border border-slate-700 text-white text-[10px] rounded h-7 px-1.5 disabled:opacity-40"
+                  >
+                    {FONT_OPTIONS.map((f) => (
+                      <option key={f.id} value={f.id}>{f.label}</option>
+                    ))}
+                  </select>
+                </div>
 
                 <div className="flex items-center gap-2">
                   <span className="text-slate-500 text-[10px] w-10 shrink-0">Size</span>
