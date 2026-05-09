@@ -28,8 +28,7 @@ ingress:
   tls:
     secretName: pro-jection-tls
   annotations:
-    # Wire up cert-manager here if you use it, e.g.:
-    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 
 resources:
   requests:
