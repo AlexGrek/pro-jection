@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Maximize, Minimize } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { PhaserCanvas, type PhaserCanvasHandle } from '@/components/PhaserCanvas'
 import type { Scene } from '@/lib/scene'
@@ -14,8 +15,23 @@ export function ProjectorPage() {
   const { code } = useParams<{ code: string }>()
   const [connState, setConnState] = useState<ConnState>('connecting')
   const [controllerOnline, setControllerOnline] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const canvasRef = useRef<PhaserCanvasHandle>(null)
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen()
+    } else {
+      document.exitFullscreen()
+    }
+  }, [])
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => document.removeEventListener('fullscreenchange', onFsChange)
+  }, [])
 
   const connect = useCallback(() => {
     wsRef.current?.close()
@@ -58,8 +74,17 @@ export function ProjectorPage() {
     >
       <PhaserCanvas ref={canvasRef} className="w-full h-full" />
 
-      {/* Minimal HUD — top-right */}
-      <div className="absolute top-0 right-0 flex items-center gap-3 px-4 py-3 text-xs font-light select-none pointer-events-none">
+      {/* Fullscreen toggle — top-right corner */}
+      <button
+        onClick={toggleFullscreen}
+        className="absolute top-3 right-3 p-1.5 rounded text-white/20 hover:text-white/60 transition-colors z-10"
+        title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+      >
+        {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+      </button>
+
+      {/* Minimal HUD — top-right, shifted left of the fullscreen button */}
+      <div className="absolute top-0 right-9 flex items-center gap-3 px-4 py-3 text-xs font-light select-none pointer-events-none">
         <span className={`flex items-center gap-1.5 ${controllerOnline ? 'text-slate-700' : 'text-slate-800'}`}>
           <span className={`inline-block w-1.5 h-1.5 rounded-full ${controllerOnline ? 'bg-green-700' : 'bg-slate-800'}`} />
           ctrl

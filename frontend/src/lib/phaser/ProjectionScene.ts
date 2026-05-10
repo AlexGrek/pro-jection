@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import type { Layer, Scene } from '@/lib/scene'
+import { getArrayModifier } from '@/lib/scene'
 import { CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX } from './constants'
 import { applyText, refreshTextSelection } from './renderers/text'
 import { applyShape, refreshShapeSelection } from './renderers/shape'
@@ -25,6 +26,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   readonly gameObjects = new Map<string, LayerObject>()
   readonly layerData = new Map<string, Layer>()
   selectedId: string | null = null
+  private _nonInteractive = new Set<string>()
 
   private hint?: Phaser.GameObjects.Text
 
@@ -49,9 +51,24 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   applyScene(scene: Scene) {
     const newIds = new Set(scene.objects.map((l) => l.id))
 
+    // Build the set of clone IDs we expect after this apply.
+    const expectedCloneIds = new Set<string>()
+    this._nonInteractive.clear()
+    scene.objects.forEach((layer) => {
+      const arr = getArrayModifier(layer)
+      if (arr && arr.count > 1) {
+        for (let ci = 1; ci < arr.count; ci++) {
+          const cloneId = `${layer.id}__arr_${ci}`
+          expectedCloneIds.add(cloneId)
+          this._nonInteractive.add(cloneId)
+        }
+      }
+    })
+
+    const allExpected = new Set([...newIds, ...expectedCloneIds])
     const stale: string[] = []
     for (const id of this.gameObjects.keys()) {
-      if (!newIds.has(id)) stale.push(id)
+      if (!allExpected.has(id)) stale.push(id)
     }
     for (const id of stale) {
       this.destroyGameObject(id)
@@ -62,7 +79,28 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       this.layerData.set(layer.id, { ...layer })
       this._dispatchApply(layer)
       const go = this.gameObjects.get(layer.id)
-      if (go) go.setDepth(i)
+      if (go) go.setDepth(i * 1000)
+
+      const arr = getArrayModifier(layer)
+      if (arr && arr.count > 1) {
+        const baseGo = this.gameObjects.get(layer.id)
+        const stepX = arr.relative && baseGo
+          ? arr.offset_x * (baseGo.width / CANVAS_W)
+          : arr.offset_x
+        const stepY = arr.relative && baseGo
+          ? arr.offset_y * (baseGo.height / CANVAS_H)
+          : arr.offset_y
+        for (let ci = 1; ci < arr.count; ci++) {
+          const cloneId = `${layer.id}__arr_${ci}`
+          const dx = arr.direction !== 'y' ? stepX * ci : 0
+          const dy = arr.direction !== 'x' ? stepY * ci : 0
+          const cloneLayer = { ...layer, id: cloneId, x: layer.x + dx, y: layer.y + dy }
+          this.layerData.set(cloneId, cloneLayer)
+          this._dispatchApply(cloneLayer)
+          const cgo = this.gameObjects.get(cloneId)
+          if (cgo) cgo.setDepth(i * 1000 + ci)
+        }
+      }
     })
 
     if (this.hint) {
@@ -93,6 +131,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   }
 
   attachInteractive(go: LayerObject, id: string, opts: InteractiveOpts = {}): void {
+    if (this._nonInteractive.has(id)) return
     const draggable = opts.draggable ?? true
     const margin = opts.margin ?? 0
 

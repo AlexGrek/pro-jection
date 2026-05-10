@@ -3,10 +3,24 @@ export interface Animations {
   // future: { enter?: ..., exit?: ..., loop?: ... }
 }
 
-/** Per-layer modifier (Blender-style: array, filters, phaser options).
- *  Empty placeholder for now — actual modifier types will be a discriminated union later. */
-export interface Modifier {
-  // future: { id: string, type: 'array' | 'filter' | 'glow' | ..., ... }
+export interface ArrayModifier {
+  type: 'array'
+  /** Total number of copies including the original (min 2). */
+  count: number
+  /** X offset per step. In absolute mode: fraction of canvas width. In relative mode: fraction of object width. */
+  offset_x: number
+  /** Y offset per step. In absolute mode: fraction of canvas height. In relative mode: fraction of object height. */
+  offset_y: number
+  /** Which axis the offset applies to. */
+  direction: 'x' | 'y' | 'both'
+  /** When true, offset is multiplied by the object's own dimensions (text/shape only). */
+  relative: boolean
+}
+
+export type Modifier = ArrayModifier
+
+export function getArrayModifier(layer: { modifiers: Modifier[] }): ArrayModifier | undefined {
+  return layer.modifiers.find((m): m is ArrayModifier => m.type === 'array')
 }
 
 /** Fields shared by every layer type. */

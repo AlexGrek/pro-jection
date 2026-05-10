@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { IconArrowLeft, IconDeviceGamepad2, IconRefresh } from '@tabler/icons-react'
+import { IconArrowLeft, IconDeviceGamepad2, IconDownload, IconRefresh, IconUpload } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { PhaserCanvas, type PhaserCanvasHandle } from '@/components/PhaserCanvas'
 import { AddObjectPanel } from '@/components/controller/AddObjectPanel'
@@ -85,6 +85,7 @@ export function ControllerPage() {
   const wsRef = useRef<WebSocket | null>(null)
   const canvasRef = useRef<PhaserCanvasHandle>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const objectsRef = useRef<Layer[]>(objects)
   useEffect(() => { objectsRef.current = objects }, [objects])
 
@@ -221,6 +222,36 @@ export function ControllerPage() {
     sendNow(next)
   }
 
+  // ── Save / Load ───────────────────────────────────────────────────────────
+  const saveScene = useCallback(() => {
+    const scene: Scene = { objects: objectsRef.current }
+    const blob = new Blob([JSON.stringify(scene, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `scene-${code}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [code])
+
+  const loadScene = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const scene: Scene = JSON.parse(ev.target?.result as string)
+        if (!Array.isArray(scene.objects)) throw new Error('invalid scene')
+        applyObjects(scene.objects)
+        sendNow(scene.objects)
+      } catch {
+        // silently ignore malformed files
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }, [applyObjects, sendNow])
+
   const controls = useMemo<PropertyControls>(() => ({
     patch: patchSelected,
     sendNow,
@@ -248,7 +279,34 @@ export function ControllerPage() {
         </Button>
         <IconDeviceGamepad2 size={18} stroke={1} className="text-blue-400 shrink-0" />
         <span className="text-white font-light">Controller</span>
-        <code className="ml-auto font-mono tracking-[0.2em] text-slate-300 text-sm">{code}</code>
+        <div className="ml-auto flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={loadScene}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-slate-400 hover:text-white hover:bg-slate-800 gap-1.5 px-2"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <IconUpload size={15} stroke={1.5} />
+            Load
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-slate-400 hover:text-white hover:bg-slate-800 gap-1.5 px-2"
+            onClick={saveScene}
+          >
+            <IconDownload size={15} stroke={1.5} />
+            Save
+          </Button>
+        </div>
+        <code className="font-mono tracking-[0.2em] text-slate-300 text-sm">{code}</code>
         <span className={`text-xs px-2 py-0.5 rounded-full font-light ${STATUS_STYLES[connState]}`}>
           {connState}
         </span>
