@@ -1,19 +1,26 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import {
-  IconDeviceGamepad2,
-  IconArrowLeft,
-  IconRefresh,
-  IconLetterT,
-  IconChevronUp,
-  IconChevronDown,
-  IconChevronsUp,
-  IconChevronsDown,
-} from '@tabler/icons-react'
+import { IconArrowLeft, IconDeviceGamepad2, IconRefresh } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { PhaserCanvas, type PhaserCanvasHandle } from '@/components/PhaserCanvas'
-import { DEFAULT_TEXT_LAYER, FONT_OPTIONS, type FontId, type Layer, type Scene, type TextLayer } from '@/lib/scene'
+import { AddObjectPanel } from '@/components/controller/AddObjectPanel'
+import { FillProperties } from '@/components/controller/FillProperties'
+import { LayerRow } from '@/components/controller/LayerRow'
+import { PropertyRow } from '@/components/controller/PropertyRow'
+import { ShapeProperties } from '@/components/controller/ShapeProperties'
+import { TextProperties } from '@/components/controller/TextProperties'
+import type { PropertyControls } from '@/components/controller/types'
+import {
+  DEFAULT_CIRCLE_LAYER,
+  DEFAULT_FILL_LAYER,
+  DEFAULT_RECT_LAYER,
+  DEFAULT_TEXT_LAYER,
+  type FillLayer,
+  type Layer,
+  type Scene,
+  type ShapeLayer,
+  type TextLayer,
+} from '@/lib/scene'
 
 type ConnState = 'connecting' | 'connected' | 'disconnected' | 'error'
 
@@ -30,11 +37,6 @@ const STATUS_STYLES: Record<ConnState, string> = {
 }
 
 const TEXT_DEBOUNCE_MS = 350
-
-function layerLabel(layer: Layer): string {
-  if (layer.type === 'text') return layer.text || '(empty)'
-  return layer.type
-}
 
 export function ControllerPage() {
   const navigate = useNavigate()
@@ -75,6 +77,8 @@ export function ControllerPage() {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => sendNow(next), TEXT_DEBOUNCE_MS)
   }, [sendNow])
+
+  const sendCurrent = useCallback(() => sendNow(objectsRef.current), [sendNow])
 
   useEffect(() => () => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -118,19 +122,18 @@ export function ControllerPage() {
     sendNow(next)
   }, [applyObjects, sendNow])
 
-  const onObjectSelect = useCallback((id: string) => {
-    setSelectedId(id)
-  }, [])
+  const onObjectSelect = useCallback((id: string) => setSelectedId(id), [])
 
-  // Returns the new objects array so callers can decide how/when to send.
-  const patchSelected = (patch: Partial<Omit<TextLayer, 'id' | 'type'>>): Layer[] => {
+  // ── Layer mutation ────────────────────────────────────────────────────────
+  // Permissive `patch` — caller is responsible for passing fields valid for the selected layer's type.
+  const patchSelected = useCallback((patch: Record<string, unknown>): Layer[] => {
     if (!selectedId) return objectsRef.current
     const next = objectsRef.current.map((o) =>
-      o.id === selectedId && o.type === 'text' ? { ...o, ...patch } : o,
+      o.id === selectedId ? ({ ...o, ...patch } as Layer) : o,
     )
     applyObjects(next)
     return next
-  }
+  }, [selectedId, applyObjects])
 
   const moveLayer = (from: number, to: number) => {
     if (from === to) return
@@ -148,22 +151,45 @@ export function ControllerPage() {
     canvasRef.current?.selectObject(id)
   }
 
-  const addTextObject = () => {
-    const id = crypto.randomUUID()
-    const newLayer: TextLayer = { ...DEFAULT_TEXT_LAYER, id }
-    const next = [...objectsRef.current, newLayer]
+  const addLayerAtEnd = (layer: Layer) => {
+    const next = [...objectsRef.current, layer]
     applyObjects(next)
-    setSelectedId(id)
-    canvasRef.current?.selectObject(id)
+    setSelectedId(layer.id)
+    canvasRef.current?.selectObject(layer.id)
     sendNow(next)
   }
+
+  const addText = () => addLayerAtEnd({ ...DEFAULT_TEXT_LAYER, id: crypto.randomUUID() } as TextLayer)
+  const addRectangle = () => addLayerAtEnd({ ...DEFAULT_RECT_LAYER, id: crypto.randomUUID() } as ShapeLayer)
+  const addCircle = () => addLayerAtEnd({ ...DEFAULT_CIRCLE_LAYER, id: crypto.randomUUID() } as ShapeLayer)
+
+  // Fill layers default to the back of the stack so they act as backgrounds.
+  const addFill = () => {
+    const newLayer: FillLayer = {
+      ...DEFAULT_FILL_LAYER,
+      id: crypto.randomUUID(),
+      stops: DEFAULT_FILL_LAYER.stops.map((s) => ({ ...s })),
+    }
+    const next = [newLayer, ...objectsRef.current]
+    applyObjects(next)
+    setSelectedId(newLayer.id)
+    canvasRef.current?.selectObject(newLayer.id)
+    sendNow(next)
+  }
+
+  const controls = useMemo<PropertyControls>(() => ({
+    patch: patchSelected,
+    sendNow,
+    sendDebounced,
+    sendCurrent,
+    disabled: connState !== 'connected',
+  }), [patchSelected, sendNow, sendDebounced, sendCurrent, connState])
 
   // Display layers in reverse z-order so top of panel = front of stack (Photoshop convention).
   const displayLayers = [...objects].map((layer, idx) => ({ layer, idx })).reverse()
 
   return (
     <main className="h-screen flex flex-col bg-linear-to-br from-slate-950 to-blue-950 overflow-hidden">
-      {/* Header */}
       <header className="flex items-center gap-3 px-4 py-3 border-b border-slate-800/60 bg-slate-950/40 backdrop-blur shrink-0">
         <Button
           variant="ghost"
@@ -182,7 +208,6 @@ export function ControllerPage() {
         </span>
       </header>
 
-      {/* Error banner */}
       {errorMsg && (
         <div className="flex items-center gap-3 bg-red-950/60 border-b border-red-800/50 text-red-300 px-4 py-3 text-sm font-light shrink-0">
           <span className="flex-1">{errorMsg}</span>
@@ -215,13 +240,11 @@ export function ControllerPage() {
         </div>
       )}
 
-      {/* Main content */}
       <div className="flex-1 min-h-0 flex flex-col">
 
         {/* Top row: canvas + layers panel */}
         <div className="flex-1 min-h-0 flex">
 
-          {/* Phaser canvas */}
           <div className="flex-1 min-w-0 bg-black overflow-hidden">
             <PhaserCanvas
               ref={canvasRef}
@@ -232,7 +255,6 @@ export function ControllerPage() {
             />
           </div>
 
-          {/* Layers toolbox */}
           <div className="w-56 shrink-0 border-l border-slate-800/60 bg-slate-950/60 flex flex-col">
             <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
               Layers
@@ -241,53 +263,17 @@ export function ControllerPage() {
               {objects.length === 0 && (
                 <p className="text-slate-700 text-[10px] px-2 py-1">No layers yet.</p>
               )}
-              {displayLayers.map(({ layer, idx }) => {
-                const isFront = idx === objects.length - 1
-                const isBack = idx === 0
-                const isSelected = layer.id === selectedId
-                return (
-                  <div
-                    key={layer.id}
-                    className={`flex items-center gap-0.5 pl-2 pr-1 py-1 rounded border transition-colors ${
-                      isSelected
-                        ? 'bg-blue-500/10 border-blue-500/30 text-white'
-                        : 'bg-slate-800/30 border-slate-700/20 text-slate-400 hover:text-white hover:bg-slate-800/50'
-                    }`}
-                  >
-                    <button
-                      onClick={() => selectLayer(layer.id)}
-                      className="flex-1 min-w-0 flex items-center gap-1.5 text-left"
-                    >
-                      <IconLetterT size={11} className="shrink-0" />
-                      <span className="text-xs font-light truncate">{layerLabel(layer)}</span>
-                    </button>
-                    <ReorderBtn
-                      label="Bring to front"
-                      icon={<IconChevronsUp size={12} stroke={1.5} />}
-                      disabled={isFront}
-                      onClick={() => moveLayer(idx, objects.length - 1)}
-                    />
-                    <ReorderBtn
-                      label="Forward"
-                      icon={<IconChevronUp size={12} stroke={1.5} />}
-                      disabled={isFront}
-                      onClick={() => moveLayer(idx, idx + 1)}
-                    />
-                    <ReorderBtn
-                      label="Backward"
-                      icon={<IconChevronDown size={12} stroke={1.5} />}
-                      disabled={isBack}
-                      onClick={() => moveLayer(idx, idx - 1)}
-                    />
-                    <ReorderBtn
-                      label="Send to back"
-                      icon={<IconChevronsDown size={12} stroke={1.5} />}
-                      disabled={isBack}
-                      onClick={() => moveLayer(idx, 0)}
-                    />
-                  </div>
-                )
-              })}
+              {displayLayers.map(({ layer, idx }) => (
+                <LayerRow
+                  key={layer.id}
+                  layer={layer}
+                  idx={idx}
+                  total={objects.length}
+                  selected={layer.id === selectedId}
+                  onSelect={() => selectLayer(layer.id)}
+                  onMove={(target) => moveLayer(idx, target)}
+                />
+              ))}
             </div>
           </div>
         </div>
@@ -295,90 +281,52 @@ export function ControllerPage() {
         {/* Bottom row: properties + modifiers + animations + add */}
         <div className="h-56 flex border-t border-slate-800/60 shrink-0">
 
-          {/* Selected object properties */}
+          {/* Properties — type-specific block + shared common rows */}
           <div className="w-56 shrink-0 border-r border-slate-800/60 bg-slate-950/40 flex flex-col">
             <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
               Properties
             </div>
-            {selected && selected.type === 'text' ? (
+            {selected ? (
               <div className="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col gap-2.5">
-                {/* Text — debounced send */}
-                <Input
-                  value={selected.text}
-                  onChange={(e) => sendDebounced(patchSelected({ text: e.target.value }))}
-                  placeholder="Text…"
-                  disabled={connState !== 'connected'}
-                  className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600 font-light text-xs h-7 px-2"
-                />
+                {selected.type === 'text' && <TextProperties layer={selected} controls={controls} />}
+                {selected.type === 'shape' && <ShapeProperties layer={selected} controls={controls} />}
+                {selected.type === 'fill' && <FillProperties layer={selected} controls={controls} />}
 
-                {/* Font — immediate send */}
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-500 text-[10px] w-10 shrink-0">Font</span>
-                  <select
-                    value={selected.font_family}
-                    onChange={(e) => sendNow(patchSelected({ font_family: e.target.value as FontId }))}
-                    disabled={connState !== 'connected'}
-                    className="flex-1 bg-slate-900 border border-slate-700 text-white text-[10px] rounded h-7 px-1.5 disabled:opacity-40"
-                  >
-                    {FONT_OPTIONS.map((f) => (
-                      <option key={f.id} value={f.id}>{f.label}</option>
-                    ))}
-                  </select>
-                </div>
+                {selected.type !== 'fill' && (
+                  <PropertyRow label="Color">
+                    <input
+                      type="color"
+                      value={selected.color}
+                      onChange={(e) => patchSelected({ color: e.target.value })}
+                      onBlur={sendCurrent}
+                      disabled={connState !== 'connected'}
+                      className="w-7 h-6 rounded cursor-pointer border border-slate-700 bg-transparent disabled:opacity-40"
+                    />
+                  </PropertyRow>
+                )}
 
-                {/* Size — preview while dragging, send on release */}
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-500 text-[10px] w-10 shrink-0">Size</span>
-                  <input
-                    type="range"
-                    min={32}
-                    max={200}
-                    value={selected.font_size}
-                    onChange={(e) => patchSelected({ font_size: Number(e.target.value) })}
-                    onPointerUp={() => sendNow(objectsRef.current)}
-                    onKeyUp={() => sendNow(objectsRef.current)}
-                    disabled={connState !== 'connected'}
-                    className="flex-1 accent-blue-500 touch-none"
-                  />
-                  <span className="text-slate-400 text-[10px] w-7 text-right shrink-0">{selected.font_size}</span>
-                </div>
-
-                {/* Color — preview on input, send on commit */}
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-500 text-[10px] w-10 shrink-0">Color</span>
-                  <input
-                    type="color"
-                    value={selected.color}
-                    onChange={(e) => patchSelected({ color: e.target.value })}
-                    onBlur={() => sendNow(objectsRef.current)}
-                    disabled={connState !== 'connected'}
-                    className="w-7 h-6 rounded cursor-pointer border border-slate-700 bg-transparent disabled:opacity-40"
-                  />
-                </div>
-
-                {/* Opacity — preview while dragging, send on release */}
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-500 text-[10px] w-10 shrink-0">Alpha</span>
+                <PropertyRow label="Alpha">
                   <input
                     type="range"
                     min={0}
                     max={100}
                     value={Math.round(selected.opacity * 100)}
                     onChange={(e) => patchSelected({ opacity: Number(e.target.value) / 100 })}
-                    onPointerUp={() => sendNow(objectsRef.current)}
-                    onKeyUp={() => sendNow(objectsRef.current)}
+                    onPointerUp={sendCurrent}
+                    onKeyUp={sendCurrent}
                     disabled={connState !== 'connected'}
                     className="flex-1 accent-blue-500 touch-none"
                   />
                   <span className="text-slate-400 text-[10px] w-7 text-right shrink-0">{Math.round(selected.opacity * 100)}</span>
-                </div>
+                </PropertyRow>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-500 text-[10px] w-10 shrink-0">Pos</span>
-                  <span className="text-slate-400 text-[10px] font-mono">
-                    {selected.x.toFixed(2)}, {selected.y.toFixed(2)}
-                  </span>
-                </div>
+                {selected.type !== 'fill' && (
+                  <PropertyRow label="Pos">
+                    <span className="text-slate-400 text-[10px] font-mono">
+                      {selected.x.toFixed(2)}, {selected.y.toFixed(2)}
+                    </span>
+                  </PropertyRow>
+                )}
               </div>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center gap-3 p-4">
@@ -443,47 +391,16 @@ export function ControllerPage() {
             </div>
           </div>
 
-          {/* Add object toolbox */}
-          <div className="w-48 shrink-0 bg-slate-950/40 flex flex-col">
-            <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
-              Add Object
-            </div>
-            <div className="p-2 space-y-1">
-              <button
-                onClick={addTextObject}
-                disabled={connState !== 'connected'}
-                className="w-full flex items-center gap-2 px-2 py-2 rounded text-xs text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-left"
-              >
-                <IconLetterT size={13} className="shrink-0" />
-                Text
-              </button>
-            </div>
-          </div>
+          <AddObjectPanel
+            disabled={connState !== 'connected'}
+            onAddText={addText}
+            onAddRectangle={addRectangle}
+            onAddCircle={addCircle}
+            onAddFill={addFill}
+          />
 
         </div>
       </div>
     </main>
-  )
-}
-
-interface ReorderBtnProps {
-  label: string
-  icon: React.ReactNode
-  disabled: boolean
-  onClick: () => void
-}
-
-function ReorderBtn({ label, icon, disabled, onClick }: ReorderBtnProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-      aria-label={label}
-      className="shrink-0 p-0.5 rounded text-slate-500 hover:text-white hover:bg-slate-700/60 disabled:opacity-20 disabled:hover:text-slate-500 disabled:hover:bg-transparent disabled:cursor-not-allowed"
-    >
-      {icon}
-    </button>
   )
 }

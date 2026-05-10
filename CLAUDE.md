@@ -62,42 +62,58 @@ Clients distinguish server events from scene updates by checking for a known `ty
 
 - Pages: [App.tsx](frontend/src/App.tsx) routes:
   - `/` → [HomePage.tsx](frontend/src/pages/HomePage.tsx) — mode picker + 6-digit `CodeInput` dialog.
-  - `/controller/:code` → [ControllerPage.tsx](frontend/src/pages/ControllerPage.tsx) — two-row layout: top row is Phaser canvas + layers panel; bottom row is properties panel + log + add-object panel. Sends raw scene JSON on Send / Enter. Maintains local log (not persisted by server).
+  - `/controller/:code` → [ControllerPage.tsx](frontend/src/pages/ControllerPage.tsx) — two-row layout: top row is Phaser canvas + layers panel; bottom row is properties + modifiers + animations + add-object panels. **Auto-sends** the full scene at every commit point — there is no Send button. State and send are deliberately split: `applyObjects` updates local state and the canvas; `sendNow` / `sendDebounced` / `sendCurrent` push the scene over WebSocket.
   - `/projector/:code` → [ProjectorPage.tsx](frontend/src/pages/ProjectorPage.tsx) — full-screen Phaser canvas (view-only). Auto-reconnects every 3 s. Double-click returns home.
   - `/health` → [HealthPage.tsx](frontend/src/pages/HealthPage.tsx)
   - `/ws-test` → [WsTestPage.tsx](frontend/src/pages/WsTestPage.tsx)
 - Vite dev server proxies `/health`, `/live`, `/ready`, `/ws`, `/api` → backend on `localhost:8080` ([vite.config.ts](frontend/vite.config.ts)).
 - Tailwind: write classes directly in JSX. No config file by design — extend via CSS in [index.css](frontend/src/index.css) using `@theme` if needed.
 
+### Controller architecture
+
+Type-specific UI lives under [components/controller/](frontend/src/components/controller/). Each property panel takes `{ layer, controls }` where `controls: PropertyControls` bundles the mutation/send helpers ([types.ts](frontend/src/components/controller/types.ts)):
+
+- [TextProperties.tsx](frontend/src/components/controller/TextProperties.tsx) · [ShapeProperties.tsx](frontend/src/components/controller/ShapeProperties.tsx) · [FillProperties.tsx](frontend/src/components/controller/FillProperties.tsx)
+- [LayerRow.tsx](frontend/src/components/controller/LayerRow.tsx) — single row in the Layers panel with reorder buttons (front/forward/backward/back).
+- [AddObjectPanel.tsx](frontend/src/components/controller/AddObjectPanel.tsx) — Text / Rectangle / Circle / Background buttons.
+- [PropertyRow.tsx](frontend/src/components/controller/PropertyRow.tsx) — shared label/content row layout.
+
+Send timing per input kind:
+| Input | Timing |
+|---|---|
+| Text input | `sendDebounced` (350 ms) |
+| Font / Shape / Fill kind / Add layer / Reorder / Drag-end | `sendNow` immediate |
+| Sliders (size, alpha, width, height, stroke, angle, stop alpha) | preview on `onChange`, `sendCurrent` on `onPointerUp` / `onKeyUp` |
+| Color picker | preview on `onChange`, `sendCurrent` on `onBlur` |
+
+The layers panel renders in **reverse** array order so top-of-panel = front-of-stack (Photoshop convention). `moveLayer(from, to)` operates on real array indices.
+
 ## Scene type system
 
-Canonical types live in [frontend/src/lib/scene.ts](frontend/src/lib/scene.ts). The JSON wire format uses snake_case to match the Rust backend conventions.
+Canonical types live under [frontend/src/lib/scene/](frontend/src/lib/scene/), one file per layer kind, re-exported from [index.ts](frontend/src/lib/scene/index.ts). The JSON wire format uses snake_case to match the Rust backend conventions. The backend never inspects layer content.
 
-```typescript
-interface Animations {}          // always {} — extensible placeholder
-
-interface TextLayer extends BaseLayer {
-  type: 'text'
-  text: string
-  font_size: number              // canvas pixels in 1920×1080 space
-  color: string                  // #rrggbb
-}
-
-type Layer = TextLayer           // union grows as new types are added
-
-interface Scene {
-  objects: Layer[]               // ordered layer list
-}
+```
+lib/scene/
+├── index.ts    # Layer union, Scene, EMPTY_SCENE, barrel
+├── base.ts     # BaseLayer, Animations, Modifier
+├── fonts.ts    # FONT_OPTIONS (7 fonts), FontId, FONT_CSS
+├── text.ts     # TextLayer + DEFAULT_TEXT_LAYER
+├── shape.ts    # ShapeLayer (rectangle | circle, filled or outlined) + DEFAULT_RECT_LAYER + DEFAULT_CIRCLE_LAYER
+└── fill.ts     # FillLayer (solid | linear gradient with rgba stops) + DEFAULT_FILL_LAYER
 ```
 
-`BaseLayer` carries `id`, `x` (0–1), `y` (0–1), `animations`. The backend never inspects layer content.
+`BaseLayer` carries `id`, `x` and `y` (0–1), `opacity` (0–1), `animations: {}`, and `modifiers: []`. `Layer` is the discriminated union of `TextLayer | ShapeLayer | FillLayer`. Adding a new layer type means: add a file under `lib/scene/`, extend the `Layer` union in `index.ts`, add a renderer under `lib/phaser/renderers/`, and add a Properties component under `components/controller/`.
 
 ## Phaser integration
 
-- Scene: [ProjectionScene.ts](frontend/src/lib/phaser/ProjectionScene.ts) — 1920×1080 canvas. Maintains a `Map<id, Phaser.GameObjects.Text>` and a `Map<id, Layer>`. `applyScene(scene)` diffs the current objects against the new list, creating/updating/destroying Phaser objects as needed. In `editable` mode each text object is draggable; drag-end fires `onPositionChange(id, x, y)`. Clicking a text fires `onObjectSelect(id)`. `selectObject(id)` applies a blue stroke to the selected object.
-- Wrapper: [PhaserCanvas.tsx](frontend/src/components/PhaserCanvas.tsx) — `forwardRef` component. Handle: `applyScene(scene)`, `selectObject(id | null)`, `getScene()`. Buffers calls that arrive before the game is ready (`pendingRef`). Callback refs keep `onPositionChange` / `onObjectSelect` fresh without recreating the game.
+- Scene: [ProjectionScene.ts](frontend/src/lib/phaser/ProjectionScene.ts) — 1920×1080 canvas. Owns the `gameObjects: Map<id, LayerObject>` and `layerData: Map<id, Layer>` maps and dispatches `applyScene` to per-type renderers under [lib/phaser/renderers/](frontend/src/lib/phaser/renderers/). Implements [`RenderCtx`](frontend/src/lib/phaser/renderers/types.ts) so renderers operate via its public surface (`add`, `textures`, `gameObjects`, `layerData`, `selectedId`, `editable`, `attachInteractive`, `destroyGameObject`).
+- Renderers: [text.ts](frontend/src/lib/phaser/renderers/text.ts) creates `Phaser.GameObjects.Text`; [shape.ts](frontend/src/lib/phaser/renderers/shape.ts) creates `Rectangle` or `Ellipse` and resolves the filled / outlined / selected style permutation; [fill.ts](frontend/src/lib/phaser/renderers/fill.ts) paints into a `CanvasTexture` (HTML5 `createLinearGradient` for true rgba multi-stop gradients) and displays it as an `Image` at canvas center. Each renderer exports `apply…` and (for text/shape) `refreshSelection`.
+- `attachInteractive(go, id, opts)` is unified for all draggable / clickable layers. Text passes `{ margin: 80 }`; shapes default `margin: 0`; fills pass `{ draggable: false }` (selectable but not movable). Drag-end updates `layerData` and fires `onPositionChange`. Pointer-down fires `onObjectSelect`.
+- Selection style: text uses `setStroke('#3b82f6', 4)`; shapes overlay a blue stroke via `setStrokeStyle` (and restore the configured stroke on deselect); fills have no visual selection mark — the panel highlight is the indicator. Constants in [constants.ts](frontend/src/lib/phaser/constants.ts).
+- Z-order: `applyScene` calls `setDepth(i)` for each layer in array order, so reordering the array reorders the visual stack.
+- Wrapper: [PhaserCanvas.tsx](frontend/src/components/PhaserCanvas.tsx) — `forwardRef` component. Handle: `applyScene(scene)`, `selectObject(id | null)`, `getScene()`. Buffers calls that arrive before the game is ready (`pendingRef`). Callback refs keep `onPositionChange` / `onObjectSelect` fresh without recreating the game. The canvas container has `touch-action: none` so touch drags don't trigger browser scrolling/zooming.
 - `Phaser.Scale.FIT + CENTER_BOTH` — canvas scales to fill its container while holding 16:9. The black background hides any letterbox bars.
-- Font: `"Outfit Variable"` (loaded via `@fontsource-variable/outfit` in [index.css](frontend/src/index.css)).
+- Fonts: 7 variants loaded via `@fontsource-variable/*` and `@fontsource/*` packages, imported in [index.css](frontend/src/index.css). Selectable per text layer; catalogue in [scene/fonts.ts](frontend/src/lib/scene/fonts.ts).
 
 ## History API
 
@@ -132,5 +148,6 @@ Summary: `GET /api/sessions/{code}/history` returns the full stack and cursor; `
 - React Router stays in **library mode** (`react-router-dom` `BrowserRouter`). Don't migrate to the framework/data-router setup.
 - The projector page auto-reconnects; the controller page does not (manual reconnect button only, to surface the "already connected" error clearly).
 - Phaser game instances are owned by `PhaserCanvas` and destroyed on unmount. Never call `game.destroy()` from outside the component. Communicate with the scene exclusively through `PhaserCanvasHandle` (`applyScene`, `selectObject`, `getScene`).
-- Don't add Phaser audio, physics, or asset loaders — the scene is text-only by design.
+- Don't add Phaser audio, physics, or asset loaders. Visual layers are confined to text / shape / fill — extend by adding a new file under [lib/scene/](frontend/src/lib/scene/) plus a matching renderer in [lib/phaser/renderers/](frontend/src/lib/phaser/renderers/), not by reaching into the existing renderers.
+- Auto-send is the contract: never reintroduce a Send button. Mutations always go `patch → applyObjects → sendNow/sendDebounced/sendCurrent`. Sliders and color pickers preview on `onChange` and commit on release/blur — don't send during continuous input.
 - The Vite proxy must cover `/api` as well as `/ws` and `/health` paths.

@@ -1,26 +1,31 @@
 import Phaser from 'phaser'
-import type { Layer, Scene, TextLayer } from '@/lib/scene'
-import { DEFAULT_FONT_ID, FONT_CSS } from '@/lib/scene'
+import type { Layer, Scene } from '@/lib/scene'
+import { CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX } from './constants'
+import { applyText, refreshTextSelection } from './renderers/text'
+import { applyShape, refreshShapeSelection } from './renderers/shape'
+import { applyFill } from './renderers/fill'
+import type { InteractiveOpts, LayerObject, RenderCtx } from './renderers/types'
 
 export { type Layer, type Scene } from '@/lib/scene'
+export { CANVAS_W, CANVAS_H } from './constants'
 
-export const CANVAS_W = 1920
-export const CANVAS_H = 1080
 const HINT_FONT = '"Outfit Variable", "Outfit", system-ui, sans-serif'
 
-function fontCss(layer: TextLayer): string {
-  return FONT_CSS[layer.font_family ?? DEFAULT_FONT_ID] ?? FONT_CSS[DEFAULT_FONT_ID]
-}
-
-export class ProjectionScene extends Phaser.Scene {
+/**
+ * Phaser scene. Owns the GameObject map and the layer-data map, and dispatches
+ * scene updates to per-type renderer modules. Renderers receive the scene as a
+ * `RenderCtx` and operate via its public surface.
+ */
+export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   editable = false
   onPositionChange?: (id: string, x: number, y: number) => void
   onObjectSelect?: (id: string) => void
   onSceneReady?: (scene: ProjectionScene) => void
 
-  private gameObjects = new Map<string, Phaser.GameObjects.Text>()
-  private layerData = new Map<string, Layer>()
-  private selectedId: string | null = null
+  readonly gameObjects = new Map<string, LayerObject>()
+  readonly layerData = new Map<string, Layer>()
+  selectedId: string | null = null
+
   private hint?: Phaser.GameObjects.Text
 
   constructor() {
@@ -44,16 +49,18 @@ export class ProjectionScene extends Phaser.Scene {
   applyScene(scene: Scene) {
     const newIds = new Set(scene.objects.map((l) => l.id))
 
-    for (const [id, go] of this.gameObjects) {
-      if (!newIds.has(id)) {
-        go.destroy()
-        this.gameObjects.delete(id)
-        this.layerData.delete(id)
-      }
+    const stale: string[] = []
+    for (const id of this.gameObjects.keys()) {
+      if (!newIds.has(id)) stale.push(id)
+    }
+    for (const id of stale) {
+      this.destroyGameObject(id)
+      this.layerData.delete(id)
     }
 
     scene.objects.forEach((layer, i) => {
-      this._applyLayer(layer)
+      this.layerData.set(layer.id, { ...layer })
+      this._dispatchApply(layer)
       const go = this.gameObjects.get(layer.id)
       if (go) go.setDepth(i)
     })
@@ -63,96 +70,78 @@ export class ProjectionScene extends Phaser.Scene {
     }
   }
 
-  private _applyLayer(layer: Layer) {
-    this.layerData.set(layer.id, { ...layer })
-    if (layer.type === 'text') {
-      this._applyTextLayer(layer)
-    }
-  }
-
-  private _applyTextLayer(layer: TextLayer) {
-    const px = layer.x * CANVAS_W
-    const py = layer.y * CANVAS_H
-    const existing = this.gameObjects.get(layer.id)
-
-    if (existing) {
-      existing.setText(layer.text)
-      existing.setPosition(px, py)
-      existing.setFontSize(layer.font_size)
-      existing.setColor(layer.color)
-      existing.setFontFamily(fontCss(layer))
-      existing.setAlpha(layer.opacity ?? 1)
-    } else {
-      const t = this.add
-        .text(px, py, layer.text, {
-          fontFamily: fontCss(layer),
-          fontSize: `${layer.font_size}px`,
-          color: layer.color,
-          wordWrap: { width: CANVAS_W - 160 },
-          align: 'center',
-        })
-        .setOrigin(0.5)
-        .setAlpha(layer.opacity ?? 1)
-
-      this.gameObjects.set(layer.id, t)
-
-      if (this.editable) {
-        const id = layer.id
-        t.setInteractive({ draggable: true, cursor: 'move' })
-
-        t.on('drag', (_: Phaser.Input.Pointer, dragX: number, dragY: number) => {
-          t.setPosition(
-            Phaser.Math.Clamp(dragX, 80, CANVAS_W - 80),
-            Phaser.Math.Clamp(dragY, 80, CANVAS_H - 80),
-          )
-        })
-
-        t.on('dragend', () => {
-          const nx = t.x / CANVAS_W
-          const ny = t.y / CANVAS_H
-          const d = this.layerData.get(id)
-          if (d) this.layerData.set(id, { ...d, x: nx, y: ny })
-          this.onPositionChange?.(id, nx, ny)
-        })
-
-        t.on('pointerdown', () => {
-          this._selectById(id)
-          this.onObjectSelect?.(id)
-        })
-      }
-
-      if (this.editable && this.selectedId === layer.id) {
-        this._applyStroke(t, true)
-      }
-    }
-  }
-
   selectObject(id: string | null) {
     this._selectById(id)
   }
 
-  private _selectById(id: string | null) {
-    if (this.selectedId === id) return
-    if (this.selectedId) {
-      const prev = this.gameObjects.get(this.selectedId)
-      if (prev) this._applyStroke(prev, false)
-    }
-    this.selectedId = id
-    if (id) {
-      const curr = this.gameObjects.get(id)
-      if (curr) this._applyStroke(curr, true)
-    }
-  }
-
-  private _applyStroke(t: Phaser.GameObjects.Text, selected: boolean) {
-    if (selected) {
-      t.setStroke('#3b82f6', 4)
-    } else {
-      t.setStroke('#000000', 0)
-    }
-  }
-
   getScene(): Scene {
     return { objects: Array.from(this.layerData.values()) }
+  }
+
+  // ── Internals exposed for renderer modules (RenderCtx surface) ────────────
+
+  destroyGameObject(id: string): void {
+    const go = this.gameObjects.get(id)
+    if (go) {
+      go.destroy()
+      this.gameObjects.delete(id)
+    }
+    const key = `${FILL_TEXTURE_PREFIX}${id}`
+    if (this.textures.exists(key)) {
+      this.textures.remove(key)
+    }
+  }
+
+  attachInteractive(go: LayerObject, id: string, opts: InteractiveOpts = {}): void {
+    const draggable = opts.draggable ?? true
+    const margin = opts.margin ?? 0
+
+    if (draggable) {
+      go.setInteractive({ draggable: true, cursor: 'move' })
+      go.on('drag', (_: Phaser.Input.Pointer, dragX: number, dragY: number) => {
+        go.setPosition(
+          Phaser.Math.Clamp(dragX, margin, CANVAS_W - margin),
+          Phaser.Math.Clamp(dragY, margin, CANVAS_H - margin),
+        )
+      })
+      go.on('dragend', () => {
+        const nx = go.x / CANVAS_W
+        const ny = go.y / CANVAS_H
+        const d = this.layerData.get(id)
+        if (d) this.layerData.set(id, { ...d, x: nx, y: ny })
+        this.onPositionChange?.(id, nx, ny)
+      })
+    } else {
+      go.setInteractive({ cursor: 'pointer' })
+    }
+
+    go.on('pointerdown', () => {
+      this._selectById(id)
+      this.onObjectSelect?.(id)
+    })
+  }
+
+  // ── Private helpers ────────────────────────────────────────────────────────
+
+  private _dispatchApply(layer: Layer): void {
+    if (layer.type === 'text') applyText(this, layer)
+    else if (layer.type === 'shape') applyShape(this, layer)
+    else if (layer.type === 'fill') applyFill(this, layer)
+  }
+
+  private _selectById(id: string | null): void {
+    if (this.selectedId === id) return
+    const prev = this.selectedId
+    this.selectedId = id
+    if (prev) this._refreshSelectionStyle(prev)
+    if (id) this._refreshSelectionStyle(id)
+  }
+
+  private _refreshSelectionStyle(id: string): void {
+    const layer = this.layerData.get(id)
+    if (!layer) return
+    if (layer.type === 'text') refreshTextSelection(this, id)
+    else if (layer.type === 'shape') refreshShapeSelection(this, layer)
+    // fill: no visual selection mark — panel highlight is the indicator.
   }
 }
