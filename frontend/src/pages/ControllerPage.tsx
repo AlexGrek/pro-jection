@@ -38,6 +38,40 @@ const STATUS_STYLES: Record<ConnState, string> = {
 
 const TEXT_DEBOUNCE_MS = 350
 
+function ResizeHandle({ direction, onResize }: {
+  direction: 'h' | 'v'
+  onResize: (delta: number) => void
+}) {
+  const onMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    let prev = direction === 'h' ? e.clientX : e.clientY
+    const onMove = (ev: MouseEvent) => {
+      const cur = direction === 'h' ? ev.clientX : ev.clientY
+      onResize(cur - prev)
+      prev = cur
+    }
+    const onUp = () => {
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    document.body.style.userSelect = 'none'
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      className={`shrink-0 bg-slate-800/80 hover:bg-blue-600/50 active:bg-blue-500/60 transition-colors ${
+        direction === 'h' ? 'w-0.75 cursor-col-resize' : 'h-0.75 cursor-row-resize'
+      }`}
+    />
+  )
+}
+
+const PANEL_HDR = 'px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider'
+
 export function ControllerPage() {
   const navigate = useNavigate()
   const { code } = useParams<{ code: string }>()
@@ -51,19 +85,31 @@ export function ControllerPage() {
   const wsRef = useRef<WebSocket | null>(null)
   const canvasRef = useRef<PhaserCanvasHandle>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Mirror so commit handlers (slider release, color blur) always read fresh state.
   const objectsRef = useRef<Layer[]>(objects)
   useEffect(() => { objectsRef.current = objects }, [objects])
 
   const selected = objects.find((o) => o.id === selectedId) ?? null
 
-  // ── Local sync: state + canvas. Never touches WebSocket. ──────────────────
+  // ── Panel sizes ───────────────────────────────────────────────────────────
+  const [bottomH, setBottomH] = useState(220)
+  const [layersW, setLayersW] = useState(200)
+  const [propsW, setPropsW] = useState(210)
+  const [modsW, setModsW] = useState(180)
+  const [addW, setAddW] = useState(160)
+
+  const resizeBottomH = useCallback((d: number) => setBottomH(h => Math.max(80, Math.min(700, h - d))), [])
+  const resizeLayersW = useCallback((d: number) => setLayersW(w => Math.max(120, Math.min(600, w - d))), [])
+  const resizePropsW  = useCallback((d: number) => setPropsW(w  => Math.max(120, Math.min(600, w + d))), [])
+  const resizeModsW   = useCallback((d: number) => setModsW(w   => Math.max(80,  Math.min(600, w + d))), [])
+  const resizeAddW    = useCallback((d: number) => setAddW(w    => Math.max(120, Math.min(400, w - d))), [])
+
+  // ── Local sync: state + canvas ────────────────────────────────────────────
   const applyObjects = useCallback((next: Layer[]) => {
     setObjects(next)
     canvasRef.current?.applyScene({ objects: next })
   }, [])
 
-  // ── Send: full scene every time. Caller decides when to commit. ───────────
+  // ── Send ──────────────────────────────────────────────────────────────────
   const sendNow = useCallback((next: Layer[]) => {
     if (wsRef.current?.readyState !== WebSocket.OPEN) return
     if (debounceRef.current) {
@@ -115,7 +161,7 @@ export function ControllerPage() {
     return () => wsRef.current?.close()
   }, [connect])
 
-  // ── Drag from canvas: state updates locally, send fires on drag-end. ──────
+  // ── Canvas callbacks ──────────────────────────────────────────────────────
   const onPositionChange = useCallback((id: string, x: number, y: number) => {
     const next = objectsRef.current.map((o) => (o.id === id ? { ...o, x, y } : o))
     applyObjects(next)
@@ -125,7 +171,6 @@ export function ControllerPage() {
   const onObjectSelect = useCallback((id: string) => setSelectedId(id), [])
 
   // ── Layer mutation ────────────────────────────────────────────────────────
-  // Permissive `patch` — caller is responsible for passing fields valid for the selected layer's type.
   const patchSelected = useCallback((patch: Record<string, unknown>): Layer[] => {
     if (!selectedId) return objectsRef.current
     const next = objectsRef.current.map((o) =>
@@ -159,11 +204,10 @@ export function ControllerPage() {
     sendNow(next)
   }
 
-  const addText = () => addLayerAtEnd({ ...DEFAULT_TEXT_LAYER, id: crypto.randomUUID() } as TextLayer)
-  const addRectangle = () => addLayerAtEnd({ ...DEFAULT_RECT_LAYER, id: crypto.randomUUID() } as ShapeLayer)
-  const addCircle = () => addLayerAtEnd({ ...DEFAULT_CIRCLE_LAYER, id: crypto.randomUUID() } as ShapeLayer)
+  const addText      = () => addLayerAtEnd({ ...DEFAULT_TEXT_LAYER,   id: crypto.randomUUID() } as TextLayer)
+  const addRectangle = () => addLayerAtEnd({ ...DEFAULT_RECT_LAYER,   id: crypto.randomUUID() } as ShapeLayer)
+  const addCircle    = () => addLayerAtEnd({ ...DEFAULT_CIRCLE_LAYER, id: crypto.randomUUID() } as ShapeLayer)
 
-  // Fill layers default to the back of the stack so they act as backgrounds.
   const addFill = () => {
     const newLayer: FillLayer = {
       ...DEFAULT_FILL_LAYER,
@@ -185,11 +229,13 @@ export function ControllerPage() {
     disabled: connState !== 'connected',
   }), [patchSelected, sendNow, sendDebounced, sendCurrent, connState])
 
-  // Display layers in reverse z-order so top of panel = front of stack (Photoshop convention).
   const displayLayers = [...objects].map((layer, idx) => ({ layer, idx })).reverse()
 
   return (
-    <main className="h-screen flex flex-col bg-linear-to-br from-slate-950 to-blue-950 overflow-hidden">
+    <main
+      className="h-screen flex flex-col bg-linear-to-br from-slate-950 to-blue-950 overflow-hidden"
+      style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif' }}
+    >
       <header className="flex items-center gap-3 px-4 py-3 border-b border-slate-800/60 bg-slate-950/40 backdrop-blur shrink-0">
         <Button
           variant="ghost"
@@ -240,10 +286,10 @@ export function ControllerPage() {
         </div>
       )}
 
-      <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 
         {/* Top row: canvas + layers panel */}
-        <div className="flex-1 min-h-0 flex">
+        <div className="flex-1 min-h-0 flex overflow-hidden">
 
           <div className="flex-1 min-w-0 bg-black overflow-hidden">
             <PhaserCanvas
@@ -255,10 +301,10 @@ export function ControllerPage() {
             />
           </div>
 
-          <div className="w-56 shrink-0 border-l border-slate-800/60 bg-slate-950/60 flex flex-col">
-            <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
-              Layers
-            </div>
+          <ResizeHandle direction="h" onResize={resizeLayersW} />
+
+          <div style={{ width: layersW }} className="shrink-0 bg-slate-950/60 flex flex-col overflow-hidden">
+            <div className={PANEL_HDR}>Layers</div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
               {objects.length === 0 && (
                 <p className="text-slate-700 text-[10px] px-2 py-1">No layers yet.</p>
@@ -278,19 +324,19 @@ export function ControllerPage() {
           </div>
         </div>
 
-        {/* Bottom row: properties + modifiers + animations + add */}
-        <div className="h-56 flex border-t border-slate-800/60 shrink-0">
+        <ResizeHandle direction="v" onResize={resizeBottomH} />
 
-          {/* Properties — type-specific block + shared common rows */}
-          <div className="w-56 shrink-0 border-r border-slate-800/60 bg-slate-950/40 flex flex-col">
-            <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
-              Properties
-            </div>
+        {/* Bottom row: properties + modifiers + animations + add */}
+        <div style={{ height: bottomH }} className="flex shrink-0 overflow-hidden">
+
+          {/* Properties */}
+          <div style={{ width: propsW }} className="shrink-0 bg-slate-950/40 flex flex-col overflow-hidden">
+            <div className={PANEL_HDR}>Properties</div>
             {selected ? (
               <div className="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col gap-2.5">
-                {selected.type === 'text' && <TextProperties layer={selected} controls={controls} />}
+                {selected.type === 'text'  && <TextProperties  layer={selected} controls={controls} />}
                 {selected.type === 'shape' && <ShapeProperties layer={selected} controls={controls} />}
-                {selected.type === 'fill' && <FillProperties layer={selected} controls={controls} />}
+                {selected.type === 'fill'  && <FillProperties  layer={selected} controls={controls} />}
 
                 {selected.type !== 'fill' && (
                   <PropertyRow label="Color">
@@ -317,7 +363,9 @@ export function ControllerPage() {
                     disabled={connState !== 'connected'}
                     className="flex-1 accent-blue-500 touch-none"
                   />
-                  <span className="text-slate-400 text-[10px] w-7 text-right shrink-0">{Math.round(selected.opacity * 100)}</span>
+                  <span className="text-slate-400 text-[10px] w-7 text-right shrink-0">
+                    {Math.round(selected.opacity * 100)}
+                  </span>
                 </PropertyRow>
 
                 {selected.type !== 'fill' && (
@@ -329,7 +377,7 @@ export function ControllerPage() {
                 )}
               </div>
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3 p-4">
+              <div className="flex-1 flex items-center justify-center p-4">
                 <p className="text-slate-600 text-xs text-center font-light">
                   {objects.length === 0 ? 'Add a layer to get started.' : 'Select a layer to edit.'}
                 </p>
@@ -337,11 +385,11 @@ export function ControllerPage() {
             )}
           </div>
 
-          {/* Modifiers panel — placeholder for Blender-style modifier stack */}
-          <div className="flex-1 min-w-0 border-r border-slate-800/60 flex flex-col">
-            <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
-              Modifiers
-            </div>
+          <ResizeHandle direction="h" onResize={resizePropsW} />
+
+          {/* Modifiers */}
+          <div style={{ width: modsW }} className="shrink-0 flex flex-col overflow-hidden">
+            <div className={PANEL_HDR}>Modifiers</div>
             <div className="flex-1 min-h-0 overflow-y-auto p-2">
               {selected ? (
                 selected.modifiers.length === 0 ? (
@@ -364,11 +412,11 @@ export function ControllerPage() {
             </div>
           </div>
 
-          {/* Animations panel — placeholder */}
-          <div className="flex-1 min-w-0 border-r border-slate-800/60 flex flex-col">
-            <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
-              Animations
-            </div>
+          <ResizeHandle direction="h" onResize={resizeModsW} />
+
+          {/* Animations */}
+          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+            <div className={PANEL_HDR}>Animations</div>
             <div className="flex-1 min-h-0 overflow-y-auto p-2">
               {selected ? (
                 Object.keys(selected.animations).length === 0 ? (
@@ -391,14 +439,18 @@ export function ControllerPage() {
             </div>
           </div>
 
-          <AddObjectPanel
-            disabled={connState !== 'connected'}
-            onAddText={addText}
-            onAddRectangle={addRectangle}
-            onAddCircle={addCircle}
-            onAddFill={addFill}
-          />
+          <ResizeHandle direction="h" onResize={resizeAddW} />
 
+          {/* Add Object */}
+          <div style={{ width: addW }} className="shrink-0 bg-slate-950/40 flex flex-col overflow-hidden">
+            <AddObjectPanel
+              disabled={connState !== 'connected'}
+              onAddText={addText}
+              onAddRectangle={addRectangle}
+              onAddCircle={addCircle}
+              onAddFill={addFill}
+            />
+          </div>
         </div>
       </div>
     </main>

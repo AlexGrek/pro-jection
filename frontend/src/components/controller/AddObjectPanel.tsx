@@ -16,7 +16,7 @@ interface Props {
 
 export function AddObjectPanel({ disabled, onAddText, onAddRectangle, onAddCircle, onAddFill }: Props) {
   return (
-    <div className="w-48 shrink-0 bg-slate-950/40 flex flex-col">
+    <div className="flex flex-col h-full">
       <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
         Add Object
       </div>
