@@ -140,7 +140,7 @@ See [history.md](history.md) for the full cursor model, truncation behaviour, an
 | Layer | Tech |
 |---|---|
 | Backend | Rust, Axum 0.8, tokio, `tokio::sync::broadcast` for fan-out |
-| Frontend | Vite + React 19 + TypeScript, Tailwind v4, `react-router-dom`, Phaser 3 |
+| Frontend | Vite + React 19 + TypeScript, Tailwind v4, `react-router-dom`, Phaser 4 |
 | Deployment | Single StatefulSet pod, Helm chart, Traefik ingress, cert-manager TLS |
 | Storage | OpenDAL (`fs` on a `ReadWriteOnce` PVC) — not used for sessions |
 
@@ -172,18 +172,40 @@ frontend/
   src/
     App.tsx          # routes
     lib/
-      scene.ts            # canonical Scene / Layer / TextLayer types (wire format)
+      scene/              # canonical Scene / Layer types (wire format)
+        index.ts            #   Layer union, Scene, EMPTY_SCENE, barrel
+        base.ts             #   BaseLayer, Animations, Modifier
+        fonts.ts            #   font catalogue (7 variants)
+        text.ts             #   TextLayer + default
+        shape.ts            #   ShapeLayer + rect/circle defaults
+        fill.ts             #   FillLayer + ColorStop + default
       phaser/
-        ProjectionScene.ts  # multi-object 1920×1080 scene, drag support, selection
+        ProjectionScene.ts  # 1920×1080 scene; owns gameObjects/layerData maps; dispatches per-type
+        constants.ts        # CANVAS_W/H, selection colors, fill texture key prefix
+        colors.ts           # hex/rgba helpers
+        fillTexture.ts      # paintFill — solid + linear gradient onto a 2D canvas
+        renderers/
+          types.ts            # RenderCtx interface, LayerObject union, InteractiveOpts
+          text.ts             # applyText + refreshTextSelection
+          shape.ts            # applyShape + refreshShapeSelection
+          fill.ts             # applyFill (CanvasTexture lifecycle)
     pages/
       HomePage.tsx        # mode picker + 6-digit code dialog
-      ControllerPage.tsx  # WS client, two-row editor layout, layers/props panels
+      ControllerPage.tsx  # WS client; orchestrates state, send timing, layout
       ProjectorPage.tsx   # WS client, full-screen canvas, auto-reconnect
       HealthPage.tsx      # /health viewer
       WsTestPage.tsx      # /ws/echo tester
     components/
       PhaserCanvas.tsx    # forwardRef wrapper: applyScene / selectObject / getScene
       CodeInput.tsx       # 6-digit entry dialog
+      controller/         # type-specific controller UI
+        types.ts            #   PropertyControls (patch/sendNow/sendDebounced/sendCurrent)
+        PropertyRow.tsx     #   shared label/content row
+        TextProperties.tsx  #   text-layer Properties panel
+        ShapeProperties.tsx #   shape-layer Properties panel
+        FillProperties.tsx  #   fill-layer Properties panel (gradient stops)
+        LayerRow.tsx        #   single Layers-panel row + reorder buttons
+        AddObjectPanel.tsx  #   Text / Rectangle / Circle / Background buttons
       ui/                 # button, card, dialog, input
 helm-chart/          # StatefulSet + PVC + two Ingresses + storage ConfigMap
 Dockerfile           # two-stage: host builds frontend, image copies dist/
