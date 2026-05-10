@@ -4,6 +4,7 @@ import { IconArrowLeft, IconDeviceGamepad2, IconDownload, IconRefresh, IconUploa
 import { Button } from '@/components/ui/button'
 import { PhaserCanvas, type PhaserCanvasHandle } from '@/components/PhaserCanvas'
 import { AddObjectPanel } from '@/components/controller/AddObjectPanel'
+import { ArrayModifierPanel } from '@/components/controller/ArrayModifierPanel'
 import { FillProperties } from '@/components/controller/FillProperties'
 import { LayerRow } from '@/components/controller/LayerRow'
 import { PropertyRow } from '@/components/controller/PropertyRow'
@@ -448,24 +449,11 @@ export function ControllerPage() {
           {/* Modifiers */}
           <div style={{ width: modsW }} className="shrink-0 flex flex-col overflow-hidden">
             <div className={PANEL_HDR}>Modifiers</div>
-            <div className="flex-1 min-h-0 overflow-y-auto p-2">
+            <div className="flex-1 min-h-0 overflow-y-auto">
               {selected ? (
-                selected.modifiers.length === 0 ? (
-                  <p className="text-slate-700 text-[10px] px-1 py-1 italic">No modifiers.</p>
-                ) : (
-                  <div className="space-y-1">
-                    {selected.modifiers.map((_m, i) => (
-                      <div
-                        key={i}
-                        className="px-2 py-1 rounded bg-slate-800/40 border border-slate-700/20 text-xs text-slate-400 font-light"
-                      >
-                        Modifier #{i + 1}
-                      </div>
-                    ))}
-                  </div>
-                )
+                <ArrayModifierPanel layer={selected} controls={controls} />
               ) : (
-                <p className="text-slate-700 text-[10px] px-1 py-1">Select a layer.</p>
+                <p className="text-slate-700 text-[10px] px-3 py-2">Select a layer.</p>
               )}
             </div>
           </div>

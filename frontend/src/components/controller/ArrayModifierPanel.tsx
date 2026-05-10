@@ -11,9 +11,10 @@ interface Props {
 const DEFAULT_ARRAY: ArrayModifier = {
   type: 'array',
   count: 3,
-  offset_x: 0.1,
+  offset_x: 1.1,
   offset_y: 0,
   direction: 'x',
+  relative: true,
 }
 
 const DIR_LABELS: { value: ArrayModifier['direction']; label: string }[] = [
@@ -55,6 +56,20 @@ export function ArrayModifierPanel({ layer, controls }: Props) {
       </div>
     )
   }
+
+  // In relative mode, offset values represent multiples of object size (-3x to 3x).
+  // In absolute mode, they represent canvas fractions (-1 to 1).
+  const sliderMin = arr.relative ? -300 : -100
+  const sliderMax = arr.relative ? 300 : 100
+
+  const toSlider = (v: number) => Math.round(v * 100)
+  const fromSlider = (s: number) => s / 100
+
+  const fmtOffset = (v: number) =>
+    arr.relative ? v.toFixed(2) + 'x' : String(Math.round(v * 100))
+
+  // Relative mode only makes sense for text/shape — fill layers have no meaningful size.
+  const canRelative = layer.type !== 'fill'
 
   return (
     <div className="p-2 space-y-2">
@@ -102,21 +117,36 @@ export function ArrayModifierPanel({ layer, controls }: Props) {
         </div>
       </PropertyRow>
 
+      {canRelative && (
+        <PropertyRow label="Rel">
+          <label className="flex items-center gap-1.5 text-slate-400 text-[10px] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={arr.relative}
+              onChange={(e) => sendNow(patchArr({ relative: e.target.checked }))}
+              disabled={disabled}
+              className="accent-blue-500"
+            />
+            Object size
+          </label>
+        </PropertyRow>
+      )}
+
       {arr.direction !== 'y' && (
         <PropertyRow label="Off X">
           <input
             type="range"
-            min={-100}
-            max={100}
-            value={Math.round(arr.offset_x * 100)}
-            onChange={(e) => patchArr({ offset_x: Number(e.target.value) / 100 })}
+            min={sliderMin}
+            max={sliderMax}
+            value={toSlider(arr.offset_x)}
+            onChange={(e) => patchArr({ offset_x: fromSlider(Number(e.target.value)) })}
             onPointerUp={sendCurrent}
             onKeyUp={sendCurrent}
             disabled={disabled}
             className="flex-1 accent-blue-500 touch-none"
           />
-          <span className="text-slate-400 text-[10px] w-7 text-right shrink-0">
-            {Math.round(arr.offset_x * 100)}
+          <span className="text-slate-400 text-[10px] w-8 text-right shrink-0">
+            {fmtOffset(arr.offset_x)}
           </span>
         </PropertyRow>
       )}
@@ -125,17 +155,17 @@ export function ArrayModifierPanel({ layer, controls }: Props) {
         <PropertyRow label="Off Y">
           <input
             type="range"
-            min={-100}
-            max={100}
-            value={Math.round(arr.offset_y * 100)}
-            onChange={(e) => patchArr({ offset_y: Number(e.target.value) / 100 })}
+            min={sliderMin}
+            max={sliderMax}
+            value={toSlider(arr.offset_y)}
+            onChange={(e) => patchArr({ offset_y: fromSlider(Number(e.target.value)) })}
             onPointerUp={sendCurrent}
             onKeyUp={sendCurrent}
             disabled={disabled}
             className="flex-1 accent-blue-500 touch-none"
           />
-          <span className="text-slate-400 text-[10px] w-7 text-right shrink-0">
-            {Math.round(arr.offset_y * 100)}
+          <span className="text-slate-400 text-[10px] w-8 text-right shrink-0">
+            {fmtOffset(arr.offset_y)}
           </span>
         </PropertyRow>
       )}
