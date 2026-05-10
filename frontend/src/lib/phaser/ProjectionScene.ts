@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
-import type { Layer, Scene } from '@/lib/scene'
-import { getArrayModifier } from '@/lib/scene'
+import type { GlowModifier, Layer, Modifier, Scene } from '@/lib/scene'
+import { getArrayModifier, getGlowModifier } from '@/lib/scene'
+import { hexToInt } from './colors'
 import { CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX } from './constants'
 import { applyText, refreshTextSelection } from './renderers/text'
 import { applyShape, refreshShapeSelection } from './renderers/shape'
@@ -27,6 +28,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   readonly layerData = new Map<string, Layer>()
   selectedId: string | null = null
   private _nonInteractive = new Set<string>()
+  private _glowFilters = new Map<string, Phaser.Filters.Glow>()
 
   private hint?: Phaser.GameObjects.Text
 
@@ -80,6 +82,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       this._dispatchApply(layer)
       const go = this.gameObjects.get(layer.id)
       if (go) go.setDepth(i * 1000)
+      if (layer.type !== 'fill') this._applyGlow(layer.id, layer.modifiers)
 
       const arr = getArrayModifier(layer)
       if (arr && arr.count > 1) {
@@ -124,6 +127,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       go.destroy()
       this.gameObjects.delete(id)
     }
+    this._glowFilters.delete(id)
     const key = `${FILL_TEXTURE_PREFIX}${id}`
     if (this.textures.exists(key)) {
       this.textures.remove(key)
@@ -182,5 +186,47 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     if (layer.type === 'text') refreshTextSelection(this, id)
     else if (layer.type === 'shape') refreshShapeSelection(this, layer)
     // fill: no visual selection mark — panel highlight is the indicator.
+  }
+
+  private _applyGlow(id: string, modifiers: Modifier[]): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const go = this.gameObjects.get(id) as any
+    if (!go) return
+
+    const glowMod: GlowModifier | undefined = getGlowModifier({ modifiers })
+    const existing = this._glowFilters.get(id)
+
+    if (!glowMod) {
+      if (existing) {
+        go.filters?.internal.remove(existing)
+        this._glowFilters.delete(id)
+      }
+      return
+    }
+
+    const colorInt = hexToInt(glowMod.color)
+
+    if (existing && existing.distance === glowMod.distance) {
+      existing.color = colorInt
+      existing.outerStrength = glowMod.outer_strength
+      existing.innerStrength = glowMod.inner_strength
+    } else {
+      if (existing) {
+        go.filters.internal.remove(existing)
+      } else {
+        go.enableFilters()
+      }
+      const glow: Phaser.Filters.Glow = go.filters.internal.addGlow(
+        colorInt,
+        glowMod.outer_strength,
+        glowMod.inner_strength,
+        1,    // scale
+        false, // knockout
+        10,   // quality (fixed)
+        glowMod.distance,
+      )
+      glow.setPaddingOverride(null)
+      this._glowFilters.set(id, glow)
+    }
   }
 }

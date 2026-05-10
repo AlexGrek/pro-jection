@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { PhaserCanvas, type PhaserCanvasHandle } from '@/components/PhaserCanvas'
 import { AddObjectPanel } from '@/components/controller/AddObjectPanel'
 import { ArrayModifierPanel } from '@/components/controller/ArrayModifierPanel'
+import { GlowModifierPanel } from '@/components/controller/GlowModifierPanel'
 import { FillProperties } from '@/components/controller/FillProperties'
 import { LayerRow } from '@/components/controller/LayerRow'
 import { PropertyRow } from '@/components/controller/PropertyRow'
@@ -451,7 +452,12 @@ export function ControllerPage() {
             <div className={PANEL_HDR}>Modifiers</div>
             <div className="flex-1 min-h-0 overflow-y-auto">
               {selected ? (
-                <ArrayModifierPanel layer={selected} controls={controls} />
+                <>
+                  <ArrayModifierPanel layer={selected} controls={controls} />
+                  {selected.type !== 'fill' && (
+                    <GlowModifierPanel layer={selected} controls={controls} />
+                  )}
+                </>
               ) : (
                 <p className="text-slate-700 text-[10px] px-3 py-2">Select a layer.</p>
               )}

@@ -17,10 +17,26 @@ export interface ArrayModifier {
   relative: boolean
 }
 
-export type Modifier = ArrayModifier
+export interface GlowModifier {
+  type: 'glow'
+  /** Hex color string, e.g. '#ffffff'. */
+  color: string
+  /** Strength of the glow radiating outward (0–20). */
+  outer_strength: number
+  /** Strength of the glow radiating inward (0–10). */
+  inner_strength: number
+  /** Glow spread distance in canvas pixels (5–50). Immutable once applied — changes recreate the filter. */
+  distance: number
+}
+
+export type Modifier = ArrayModifier | GlowModifier
 
 export function getArrayModifier(layer: { modifiers: Modifier[] }): ArrayModifier | undefined {
   return layer.modifiers.find((m): m is ArrayModifier => m.type === 'array')
+}
+
+export function getGlowModifier(layer: { modifiers: Modifier[] }): GlowModifier | undefined {
+  return layer.modifiers.find((m): m is GlowModifier => m.type === 'glow')
 }
 
 /** Fields shared by every layer type. */
