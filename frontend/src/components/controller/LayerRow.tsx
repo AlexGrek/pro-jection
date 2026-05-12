@@ -8,8 +8,10 @@ import {
   IconCircle,
   IconLetterT,
   IconSquare,
+  IconVectorSpline,
 } from '@tabler/icons-react'
 import type { Layer } from '@/lib/scene'
+import { findIconDef } from '@/lib/icons'
 
 interface Props {
   layer: Layer
@@ -71,6 +73,7 @@ export function LayerRow({ layer, idx, total, selected, onSelect, onMove }: Prop
 function LayerIcon({ layer }: { layer: Layer }) {
   if (layer.type === 'text') return <IconLetterT size={11} className="shrink-0" />
   if (layer.type === 'fill') return <IconBackground size={11} className="shrink-0" />
+  if (layer.type === 'icon') return <IconVectorSpline size={11} className="shrink-0" />
   if (layer.shape === 'circle') return <IconCircle size={11} className="shrink-0" />
   return <IconSquare size={11} className="shrink-0" />
 }
@@ -79,6 +82,7 @@ export function layerLabel(layer: Layer): string {
   if (layer.type === 'text') return layer.text || '(empty)'
   if (layer.type === 'shape') return layer.shape === 'circle' ? 'Circle' : 'Rectangle'
   if (layer.type === 'fill') return layer.fill === 'linear' ? 'Gradient' : 'Solid Fill'
+  if (layer.type === 'icon') return findIconDef(layer.icon_id)?.def.label ?? 'Icon'
   return (layer as Layer).type
 }
 

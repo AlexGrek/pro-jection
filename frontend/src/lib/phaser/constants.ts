@@ -6,3 +6,4 @@ export const SELECTION_INT = 0x3b82f6
 export const SELECTION_WIDTH = 4
 
 export const FILL_TEXTURE_PREFIX = 'fill-'
+export const ICON_TEXTURE_PREFIX = 'icon-'

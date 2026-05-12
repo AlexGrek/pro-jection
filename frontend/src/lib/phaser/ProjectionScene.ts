@@ -2,10 +2,11 @@ import Phaser from 'phaser'
 import type { GlowModifier, Layer, Modifier, Scene } from '@/lib/scene'
 import { getArrayModifier, getGlowModifier } from '@/lib/scene'
 import { hexToInt } from './colors'
-import { CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX } from './constants'
+import { CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX, ICON_TEXTURE_PREFIX } from './constants'
 import { applyText, refreshTextSelection } from './renderers/text'
 import { applyShape, refreshShapeSelection } from './renderers/shape'
 import { applyFill } from './renderers/fill'
+import { applyIcon } from './renderers/icon'
 import type { InteractiveOpts, LayerObject, RenderCtx } from './renderers/types'
 
 export { type Layer, type Scene } from '@/lib/scene'
@@ -128,9 +129,9 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       this.gameObjects.delete(id)
     }
     this._glowFilters.delete(id)
-    const key = `${FILL_TEXTURE_PREFIX}${id}`
-    if (this.textures.exists(key)) {
-      this.textures.remove(key)
+    for (const prefix of [FILL_TEXTURE_PREFIX, ICON_TEXTURE_PREFIX]) {
+      const key = `${prefix}${id}`
+      if (this.textures.exists(key)) this.textures.remove(key)
     }
   }
 
@@ -170,6 +171,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     if (layer.type === 'text') applyText(this, layer)
     else if (layer.type === 'shape') applyShape(this, layer)
     else if (layer.type === 'fill') applyFill(this, layer)
+    else if (layer.type === 'icon') applyIcon(this, layer)
   }
 
   private _selectById(id: string | null): void {

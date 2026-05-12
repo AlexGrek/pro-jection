@@ -7,6 +7,7 @@ import { AddObjectPanel } from '@/components/controller/AddObjectPanel'
 import { ArrayModifierPanel } from '@/components/controller/ArrayModifierPanel'
 import { GlowModifierPanel } from '@/components/controller/GlowModifierPanel'
 import { FillProperties } from '@/components/controller/FillProperties'
+import { IconProperties } from '@/components/controller/IconProperties'
 import { LayerRow } from '@/components/controller/LayerRow'
 import { PropertyRow } from '@/components/controller/PropertyRow'
 import { ShapeProperties } from '@/components/controller/ShapeProperties'
@@ -15,9 +16,11 @@ import type { PropertyControls } from '@/components/controller/types'
 import {
   DEFAULT_CIRCLE_LAYER,
   DEFAULT_FILL_LAYER,
+  DEFAULT_ICON_LAYER,
   DEFAULT_RECT_LAYER,
   DEFAULT_TEXT_LAYER,
   type FillLayer,
+  type IconLayer,
   type Layer,
   type Scene,
   type ShapeLayer,
@@ -210,6 +213,7 @@ export function ControllerPage() {
   const addText      = () => addLayerAtEnd({ ...DEFAULT_TEXT_LAYER,   id: crypto.randomUUID() } as TextLayer)
   const addRectangle = () => addLayerAtEnd({ ...DEFAULT_RECT_LAYER,   id: crypto.randomUUID() } as ShapeLayer)
   const addCircle    = () => addLayerAtEnd({ ...DEFAULT_CIRCLE_LAYER, id: crypto.randomUUID() } as ShapeLayer)
+  const addIcon      = () => addLayerAtEnd({ ...DEFAULT_ICON_LAYER,   id: crypto.randomUUID() } as IconLayer)
 
   const addFill = () => {
     const newLayer: FillLayer = {
@@ -397,6 +401,7 @@ export function ControllerPage() {
                 {selected.type === 'text'  && <TextProperties  layer={selected} controls={controls} />}
                 {selected.type === 'shape' && <ShapeProperties layer={selected} controls={controls} />}
                 {selected.type === 'fill'  && <FillProperties  layer={selected} controls={controls} />}
+                {selected.type === 'icon'  && <IconProperties  layer={selected} controls={controls} />}
 
                 {selected.type !== 'fill' && (
                   <PropertyRow label="Color">
@@ -501,6 +506,7 @@ export function ControllerPage() {
               onAddRectangle={addRectangle}
               onAddCircle={addCircle}
               onAddFill={addFill}
+              onAddIcon={addIcon}
             />
           </div>
         </div>

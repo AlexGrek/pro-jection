@@ -4,6 +4,7 @@ import {
   IconCircle,
   IconLetterT,
   IconSquare,
+  IconVectorSpline,
 } from '@tabler/icons-react'
 
 interface Props {
@@ -12,9 +13,10 @@ interface Props {
   onAddRectangle: () => void
   onAddCircle: () => void
   onAddFill: () => void
+  onAddIcon: () => void
 }
 
-export function AddObjectPanel({ disabled, onAddText, onAddRectangle, onAddCircle, onAddFill }: Props) {
+export function AddObjectPanel({ disabled, onAddText, onAddRectangle, onAddCircle, onAddFill, onAddIcon }: Props) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
@@ -25,6 +27,7 @@ export function AddObjectPanel({ disabled, onAddText, onAddRectangle, onAddCircl
         <AddButton disabled={disabled} icon={<IconSquare size={13} />} label="Rectangle" onClick={onAddRectangle} />
         <AddButton disabled={disabled} icon={<IconCircle size={13} />} label="Circle" onClick={onAddCircle} />
         <AddButton disabled={disabled} icon={<IconBackground size={13} />} label="Background" onClick={onAddFill} />
+        <AddButton disabled={disabled} icon={<IconVectorSpline size={13} />} label="Icon" onClick={onAddIcon} />
       </div>
     </div>
   )
