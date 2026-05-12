@@ -88,11 +88,15 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       const arr = getArrayModifier(layer)
       if (arr && arr.count > 1) {
         const baseGo = this.gameObjects.get(layer.id)
+        // Images (icon/fill) use displayWidth/displayHeight because setDisplaySize
+        // sets scale without touching .width, which stays at the texture size.
+        const goW = baseGo instanceof Phaser.GameObjects.Image ? baseGo.displayWidth : baseGo?.width ?? 0
+        const goH = baseGo instanceof Phaser.GameObjects.Image ? baseGo.displayHeight : baseGo?.height ?? 0
         const stepX = arr.relative && baseGo
-          ? arr.offset_x * (baseGo.width / CANVAS_W)
+          ? arr.offset_x * (goW / CANVAS_W)
           : arr.offset_x
         const stepY = arr.relative && baseGo
-          ? arr.offset_y * (baseGo.height / CANVAS_H)
+          ? arr.offset_y * (goH / CANVAS_H)
           : arr.offset_y
         for (let ci = 1; ci < arr.count; ci++) {
           const cloneId = `${layer.id}__arr_${ci}`

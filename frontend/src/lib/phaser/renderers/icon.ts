@@ -16,12 +16,12 @@ export function applyIcon(ctx: RenderCtx, layer: IconLayer): void {
   if (!result) return
   const { pack, def } = result
 
-  if (ctx.textures.exists(texKey)) ctx.textures.remove(texKey)
-  const canvasTex = ctx.textures.createCanvas(
-    texKey,
-    ICON_CANVAS_SIZE,
-    ICON_CANVAS_SIZE,
-  ) as Phaser.Textures.CanvasTexture
+  let canvasTex: Phaser.Textures.CanvasTexture
+  if (ctx.textures.exists(texKey)) {
+    canvasTex = ctx.textures.get(texKey) as Phaser.Textures.CanvasTexture
+  } else {
+    canvasTex = ctx.textures.createCanvas(texKey, ICON_CANVAS_SIZE, ICON_CANVAS_SIZE) as Phaser.Textures.CanvasTexture
+  }
   const c = canvasTex.getContext()
   if (!c) return
 
@@ -45,7 +45,6 @@ export function applyIcon(ctx: RenderCtx, layer: IconLayer): void {
   const existing = ctx.gameObjects.get(layer.id)
   if (existing instanceof Phaser.GameObjects.Image) {
     existing
-      .setTexture(texKey)
       .setPosition(px, py)
       .setAlpha(layer.opacity ?? 1)
       .setDisplaySize(sizePx, sizePx)
