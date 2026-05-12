@@ -6,6 +6,7 @@ import { PhaserCanvas, type PhaserCanvasHandle } from '@/components/PhaserCanvas
 import { AddObjectPanel } from '@/components/controller/AddObjectPanel'
 import { ArrayModifierPanel } from '@/components/controller/ArrayModifierPanel'
 import { GlowModifierPanel } from '@/components/controller/GlowModifierPanel'
+import { MatrixModifierPanel } from '@/components/controller/MatrixModifierPanel'
 import { FillProperties } from '@/components/controller/FillProperties'
 import { IconProperties } from '@/components/controller/IconProperties'
 import { LayerRow } from '@/components/controller/LayerRow'
@@ -459,6 +460,7 @@ export function ControllerPage() {
               {selected ? (
                 <>
                   <ArrayModifierPanel layer={selected} controls={controls} />
+                  <MatrixModifierPanel layer={selected} controls={controls} />
                   {selected.type !== 'fill' && (
                     <GlowModifierPanel layer={selected} controls={controls} />
                   )}

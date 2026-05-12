@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import type { GlowModifier, Layer, Modifier, Scene } from '@/lib/scene'
-import { getArrayModifier, getGlowModifier } from '@/lib/scene'
+import { getArrayModifier, getGlowModifier, getMatrixModifier } from '@/lib/scene'
 import { hexToInt } from './colors'
 import { CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX, ICON_TEXTURE_PREFIX } from './constants'
 import { applyText, refreshTextSelection } from './renderers/text'
@@ -66,6 +66,17 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
           this._nonInteractive.add(cloneId)
         }
       }
+      const mat = getMatrixModifier(layer)
+      if (mat && (mat.cols > 1 || mat.rows > 1)) {
+        for (let r = 0; r < mat.rows; r++) {
+          for (let c = 0; c < mat.cols; c++) {
+            if (r === 0 && c === 0) continue
+            const cloneId = `${layer.id}__mat_${r}_${c}`
+            expectedCloneIds.add(cloneId)
+            this._nonInteractive.add(cloneId)
+          }
+        }
+      }
     })
 
     const allExpected = new Set([...newIds, ...expectedCloneIds])
@@ -85,19 +96,16 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       if (go) go.setDepth(i * 1000)
       if (layer.type !== 'fill') this._applyGlow(layer.id, layer.modifiers)
 
+      const baseGo = this.gameObjects.get(layer.id)
+      // Images (icon/fill) use displayWidth/displayHeight because setDisplaySize
+      // sets scale without touching .width, which stays at the texture size.
+      const goW = baseGo instanceof Phaser.GameObjects.Image ? baseGo.displayWidth : baseGo?.width ?? 0
+      const goH = baseGo instanceof Phaser.GameObjects.Image ? baseGo.displayHeight : baseGo?.height ?? 0
+
       const arr = getArrayModifier(layer)
       if (arr && arr.count > 1) {
-        const baseGo = this.gameObjects.get(layer.id)
-        // Images (icon/fill) use displayWidth/displayHeight because setDisplaySize
-        // sets scale without touching .width, which stays at the texture size.
-        const goW = baseGo instanceof Phaser.GameObjects.Image ? baseGo.displayWidth : baseGo?.width ?? 0
-        const goH = baseGo instanceof Phaser.GameObjects.Image ? baseGo.displayHeight : baseGo?.height ?? 0
-        const stepX = arr.relative && baseGo
-          ? arr.offset_x * (goW / CANVAS_W)
-          : arr.offset_x
-        const stepY = arr.relative && baseGo
-          ? arr.offset_y * (goH / CANVAS_H)
-          : arr.offset_y
+        const stepX = arr.relative && baseGo ? arr.offset_x * (goW / CANVAS_W) : arr.offset_x
+        const stepY = arr.relative && baseGo ? arr.offset_y * (goH / CANVAS_H) : arr.offset_y
         for (let ci = 1; ci < arr.count; ci++) {
           const cloneId = `${layer.id}__arr_${ci}`
           const dx = arr.direction !== 'y' ? stepX * ci : 0
@@ -107,6 +115,25 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
           this._dispatchApply(cloneLayer)
           const cgo = this.gameObjects.get(cloneId)
           if (cgo) cgo.setDepth(i * 1000 + ci)
+          if (layer.type !== 'fill') this._applyGlow(cloneId, layer.modifiers)
+        }
+      }
+
+      const mat = getMatrixModifier(layer)
+      if (mat && (mat.cols > 1 || mat.rows > 1)) {
+        const stepX = mat.relative && baseGo ? mat.offset_x * (goW / CANVAS_W) : mat.offset_x
+        const stepY = mat.relative && baseGo ? mat.offset_y * (goH / CANVAS_H) : mat.offset_y
+        for (let r = 0; r < mat.rows; r++) {
+          for (let c = 0; c < mat.cols; c++) {
+            if (r === 0 && c === 0) continue
+            const cloneId = `${layer.id}__mat_${r}_${c}`
+            const cloneLayer = { ...layer, id: cloneId, x: layer.x + c * stepX, y: layer.y + r * stepY }
+            this.layerData.set(cloneId, cloneLayer)
+            this._dispatchApply(cloneLayer)
+            const cgo = this.gameObjects.get(cloneId)
+            if (cgo) cgo.setDepth(i * 1000 + r * mat.cols + c)
+            if (layer.type !== 'fill') this._applyGlow(cloneId, layer.modifiers)
+          }
         }
       }
     })

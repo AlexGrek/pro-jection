@@ -29,7 +29,21 @@ export interface GlowModifier {
   distance: number
 }
 
-export type Modifier = ArrayModifier | GlowModifier
+export interface MatrixModifier {
+  type: 'matrix'
+  /** Columns in the grid (≥ 1). */
+  cols: number
+  /** Rows in the grid (≥ 1). */
+  rows: number
+  /** X step per column. Absolute: fraction of canvas width. Relative: fraction of object width. */
+  offset_x: number
+  /** Y step per row. Absolute: fraction of canvas height. Relative: fraction of object height. */
+  offset_y: number
+  /** When true, offsets are multiplied by the object's own dimensions. */
+  relative: boolean
+}
+
+export type Modifier = ArrayModifier | GlowModifier | MatrixModifier
 
 export function getArrayModifier(layer: { modifiers: Modifier[] }): ArrayModifier | undefined {
   return layer.modifiers.find((m): m is ArrayModifier => m.type === 'array')
@@ -37,6 +51,10 @@ export function getArrayModifier(layer: { modifiers: Modifier[] }): ArrayModifie
 
 export function getGlowModifier(layer: { modifiers: Modifier[] }): GlowModifier | undefined {
   return layer.modifiers.find((m): m is GlowModifier => m.type === 'glow')
+}
+
+export function getMatrixModifier(layer: { modifiers: Modifier[] }): MatrixModifier | undefined {
+  return layer.modifiers.find((m): m is MatrixModifier => m.type === 'matrix')
 }
 
 /** Fields shared by every layer type. */
