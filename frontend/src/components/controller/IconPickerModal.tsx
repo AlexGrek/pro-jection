@@ -27,12 +27,11 @@ interface IconEntry {
 }
 
 function IconTile({
-  iconId,
   pack,
   def,
   selected,
   onClick,
-}: IconEntry & { selected: boolean; onClick: () => void }) {
+}: { pack: IconPack; def: IconDef; selected: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
@@ -264,7 +263,6 @@ export function IconPickerModal({ currentIconId, onSelect, onClose }: IconPicker
               {pageIcons.map(({ iconId, pack, def }) => (
                 <IconTile
                   key={iconId}
-                  iconId={iconId}
                   pack={pack}
                   def={def}
                   selected={iconId === currentIconId}
