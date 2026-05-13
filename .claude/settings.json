@@ -23,7 +23,8 @@
       "Bash(node -e \"const p = require\\('phaser'\\); console.log\\(p.VERSION ?? p.version ?? 'unknown'\\)\")",
       "Bash(awk 'NR>=68110 && NR<=68300' /Users/vedmedik/dev/pro-jection/frontend/node_modules/phaser/types/phaser.d.ts)",
       "Bash(awk 'NR>=60718 && NR<=60900' /Users/vedmedik/dev/pro-jection/frontend/node_modules/phaser/types/phaser.d.ts)",
-      "Bash(awk 'NR>=11618 && NR<=11640' /Users/vedmedik/dev/pro-jection/frontend/node_modules/phaser/types/phaser.d.ts)"
+      "Bash(awk 'NR>=11618 && NR<=11640' /Users/vedmedik/dev/pro-jection/frontend/node_modules/phaser/types/phaser.d.ts)",
+      "Bash(npx vite *)"
     ],
     "additionalDirectories": [
       "/tmp"

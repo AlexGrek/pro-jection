@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { IconArrowLeft, IconDeviceGamepad2, IconDownload, IconRefresh, IconUpload } from '@tabler/icons-react'
+import { IconArrowLeft, IconDeviceGamepad2, IconDownload, IconExternalLink, IconRefresh, IconUpload } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { PhaserCanvas, type PhaserCanvasHandle } from '@/components/PhaserCanvas'
 import { AddObjectPanel } from '@/components/controller/AddObjectPanel'
@@ -311,6 +311,15 @@ export function ControllerPage() {
           >
             <IconDownload size={15} stroke={1.5} />
             Save
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-slate-400 hover:text-white hover:bg-slate-800 px-2"
+            title="Open projector in new tab"
+            onClick={() => window.open(`/projector/${code}`, '_blank', 'noopener')}
+          >
+            <IconExternalLink size={15} stroke={1.5} />
           </Button>
         </div>
         <code className="font-mono tracking-[0.2em] text-slate-300 text-sm">{code}</code>
