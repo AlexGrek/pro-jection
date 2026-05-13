@@ -27,7 +27,8 @@ export function GlowModifierPanel({ layer, controls }: Props) {
   }
 
   const addGlow = () => {
-    const newModifiers = [...layer.modifiers, { ...DEFAULT_GLOW }]
+    const layerColor = 'color' in layer ? (layer.color as string) : DEFAULT_GLOW.color
+    const newModifiers = [...layer.modifiers, { ...DEFAULT_GLOW, color: layerColor }]
     sendNow(patch({ modifiers: newModifiers }))
   }
 
