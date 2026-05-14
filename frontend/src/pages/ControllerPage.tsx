@@ -123,6 +123,7 @@ export function ControllerPage() {
 
   const [objects, setObjects] = useState<Layer[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [justAddedTextId, setJustAddedTextId] = useState<string | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const canvasRef = useRef<PhaserCanvasHandle>(null)
@@ -257,9 +258,14 @@ export function ControllerPage() {
     setSelectedId(layer.id)
     canvasRef.current?.selectObject(layer.id)
     sendNow(next)
+    if (isMobile) setActiveTab('properties')
   }
 
-  const addText      = () => addLayerAtEnd({ ...DEFAULT_TEXT_LAYER,   id: crypto.randomUUID() } as TextLayer)
+  const addText = () => {
+    const layer = { ...DEFAULT_TEXT_LAYER, id: crypto.randomUUID() } as TextLayer
+    addLayerAtEnd(layer)
+    setJustAddedTextId(layer.id)
+  }
   const addRectangle = () => addLayerAtEnd({ ...DEFAULT_RECT_LAYER,   id: crypto.randomUUID() } as ShapeLayer)
   const addCircle    = () => addLayerAtEnd({ ...DEFAULT_CIRCLE_LAYER, id: crypto.randomUUID() } as ShapeLayer)
   const addIcon      = () => addLayerAtEnd({ ...DEFAULT_ICON_LAYER,   id: crypto.randomUUID() } as IconLayer)
@@ -276,6 +282,7 @@ export function ControllerPage() {
     setSelectedId(newLayer.id)
     canvasRef.current?.selectObject(newLayer.id)
     sendNow(next)
+    if (isMobile) setActiveTab('properties')
   }
 
   // ── Save / Load ───────────────────────────────────────────────────────────
@@ -341,7 +348,7 @@ export function ControllerPage() {
 
   const propertiesContent = selected ? (
     <div className="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col gap-2.5">
-      {selected.type === 'text'  && <TextProperties  layer={selected} controls={controls} />}
+      {selected.type === 'text'  && <TextProperties  key={selected.id} layer={selected} controls={controls} autoFocus={selected.id === justAddedTextId} />}
       {selected.type === 'shape' && <ShapeProperties layer={selected} controls={controls} />}
       {selected.type === 'fill'  && <FillProperties  layer={selected} controls={controls} />}
       {selected.type === 'icon'  && <IconProperties  layer={selected} controls={controls} />}

@@ -8,9 +8,10 @@ import type { PropertyControls } from './types'
 interface Props {
   layer: TextLayer
   controls: PropertyControls
+  autoFocus?: boolean
 }
 
-export function TextProperties({ layer, controls }: Props) {
+export function TextProperties({ layer, controls, autoFocus }: Props) {
   const { patch, sendNow, sendDebounced, sendCurrent, disabled } = controls
   const [pickerOpen, setPickerOpen] = useState(false)
 
@@ -26,6 +27,7 @@ export function TextProperties({ layer, controls }: Props) {
   return (
     <>
       <Input
+        autoFocus={autoFocus}
         value={layer.text}
         onChange={(e) => sendDebounced(patch({ text: e.target.value }))}
         placeholder="Text…"

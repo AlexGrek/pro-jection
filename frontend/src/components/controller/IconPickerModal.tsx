@@ -76,6 +76,17 @@ export function IconPickerModal({ currentIconId, onSelect, onClose }: IconPicker
   const [activeTab, setActiveTab] = useState<'favorites' | string>('favorites')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setVisible(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+
+  const handleClose = useCallback(() => {
+    setVisible(false)
+    setTimeout(onClose, 180)
+  }, [onClose])
 
   const allEntries = useMemo<IconEntry[]>(() => {
     if (activeTab === 'favorites') {
@@ -112,26 +123,29 @@ export function IconPickerModal({ currentIconId, onSelect, onClose }: IconPicker
         return next
       })
       onSelect(iconId)
-      onClose()
+      handleClose()
     },
-    [onSelect, onClose],
+    [onSelect, handleClose],
   )
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') handleClose()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [handleClose])
 
   return (
     <div className="fixed inset-0 z-50 sm:flex sm:items-center sm:justify-center">
       {/* Backdrop – desktop only */}
-      <div className="hidden sm:block absolute inset-0 bg-black/60" onClick={onClose} />
+      <div
+        className={`hidden sm:block absolute inset-0 bg-black/60 transition-opacity duration-150 ${visible ? 'opacity-100' : 'opacity-0'}`}
+        onClick={handleClose}
+      />
 
       {/* Modal card */}
-      <div className="relative z-10 flex flex-col bg-slate-900 w-full h-full sm:h-auto sm:max-h-[80vh] sm:max-w-xl sm:rounded-2xl sm:mx-4 overflow-hidden shadow-2xl border-0 sm:border sm:border-slate-700/60">
+      <div className={`relative z-10 flex flex-col bg-slate-900 w-full h-full sm:h-auto sm:max-h-[80vh] sm:max-w-xl sm:rounded-2xl sm:mx-4 overflow-hidden shadow-2xl border-0 sm:border sm:border-slate-700/60 transition-all duration-200 ${visible ? 'opacity-100 sm:scale-100' : 'opacity-0 sm:scale-95'}`}>
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700 shrink-0">
           <span className="font-semibold text-sm text-white">Pick an Icon</span>
@@ -158,7 +172,7 @@ export function IconPickerModal({ currentIconId, onSelect, onClose }: IconPicker
             />
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-700 transition-colors shrink-0"
             aria-label="Close"
           >
