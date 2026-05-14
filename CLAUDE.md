@@ -113,7 +113,8 @@ lib/scene/
 - Z-order: `applyScene` calls `setDepth(i)` for each layer in array order, so reordering the array reorders the visual stack.
 - Wrapper: [PhaserCanvas.tsx](frontend/src/components/PhaserCanvas.tsx) — `forwardRef` component. Handle: `applyScene(scene)`, `selectObject(id | null)`, `getScene()`. Buffers calls that arrive before the game is ready (`pendingRef`). Callback refs keep `onPositionChange` / `onObjectSelect` fresh without recreating the game. The canvas container has `touch-action: none` so touch drags don't trigger browser scrolling/zooming.
 - `Phaser.Scale.FIT + CENTER_BOTH` — canvas scales to fill its container while holding 16:9. The black background hides any letterbox bars.
-- Fonts: 7 variants loaded via `@fontsource-variable/*` and `@fontsource/*` packages, imported in [index.css](frontend/src/index.css). Selectable per text layer; catalogue in [scene/fonts.ts](frontend/src/lib/scene/fonts.ts).
+- Fonts: loaded via `@fontsource-variable/*` and `@fontsource/*` packages, imported in [index.css](frontend/src/index.css). Selectable per text layer; catalogue in [scene/fonts.ts](frontend/src/lib/scene/fonts.ts).
+- **Tween caveat:** `this.tweens.add({ targets: this, … })` where `this` is the `Phaser.Scene` instance does not reliably update custom properties — the property stays at its initial value. For per-frame animation inside `update()`, compute the value directly from `this.time.now` (e.g. a sine expression) instead of relying on a tween.
 
 ## History API
 

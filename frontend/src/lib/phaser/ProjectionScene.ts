@@ -36,7 +36,6 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
 
   private hint?: Phaser.GameObjects.Text
   private _selectionGraphics?: Phaser.GameObjects.Graphics
-  _selectionAlpha = 1.0
 
   constructor() {
     super({ key: 'ProjectionScene' })
@@ -54,15 +53,6 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
         .setOrigin(0.5)
 
       this._selectionGraphics = this.add.graphics().setDepth(Number.MAX_SAFE_INTEGER)
-
-      this.tweens.add({
-        targets: this,
-        _selectionAlpha: { from: 0.35, to: 1.0 },
-        duration: 650,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      })
     }
     this.onSceneReady?.(this)
   }
@@ -86,11 +76,11 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     const w = bounds.width + pad * 2
     const h = bounds.height + pad * 2
 
-    // White outer stroke (visible on dark backgrounds)
-    this._selectionGraphics.lineStyle(5, 0xffffff, this._selectionAlpha)
+    // Oscillates between 0.35 and 1.0 with a ~650 ms half-period
+    const alpha = 0.675 + 0.325 * Math.sin(this.time.now * Math.PI / 650)
+    this._selectionGraphics.lineStyle(5, 0xffffff, alpha)
     this._selectionGraphics.strokeRect(x, y, w, h)
-    // Black inner stroke (visible on light backgrounds)
-    this._selectionGraphics.lineStyle(2, 0x000000, this._selectionAlpha * 0.75)
+    this._selectionGraphics.lineStyle(2, 0x000000, alpha * 0.75)
     this._selectionGraphics.strokeRect(x + 4, y + 4, w - 8, h - 8)
   }
 
