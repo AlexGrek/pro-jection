@@ -8,7 +8,7 @@ import {
   IconExternalLink,
   IconPlayerPlay,
   IconRefresh,
-  IconSlidersHorizontal,
+  IconAdjustmentsHorizontal,
   IconSparkles,
   IconStack2,
   IconUpload,
@@ -60,7 +60,7 @@ type MobileTab = 'layers' | 'properties' | 'modifiers' | 'animations' | 'add'
 
 const MOBILE_TABS: { id: MobileTab; label: string; Icon: React.ComponentType<{ size?: number; stroke?: number; className?: string }> }[] = [
   { id: 'layers',     label: 'Layers', Icon: IconStack2 },
-  { id: 'properties', label: 'Props',  Icon: IconSlidersHorizontal },
+  { id: 'properties', label: 'Props',  Icon: IconAdjustmentsHorizontal },
   { id: 'modifiers',  label: 'Mods',   Icon: IconSparkles },
   { id: 'animations', label: 'Anim',   Icon: IconPlayerPlay },
   { id: 'add',        label: 'Add',    Icon: IconCirclePlus },
@@ -218,8 +218,8 @@ export function ControllerPage() {
 
   const onObjectSelect = useCallback((id: string) => {
     setSelectedId(id)
-    setActiveTab('properties')
-  }, [])
+    if (isMobile) setActiveTab('properties')
+  }, [isMobile])
 
   // ── Layer mutation ────────────────────────────────────────────────────────
   const patchSelected = useCallback((patch: Record<string, unknown>): Layer[] => {
@@ -245,6 +245,7 @@ export function ControllerPage() {
   const selectLayer = (id: string) => {
     setSelectedId(id)
     canvasRef.current?.selectObject(id)
+    if (isMobile) setActiveTab('properties')
   }
 
   const addLayerAtEnd = (layer: Layer) => {
@@ -387,16 +388,20 @@ export function ControllerPage() {
     </div>
   )
 
-  const modifiersContent = selected ? (
+  const modifiersContent = (
     <div className="flex-1 min-h-0 overflow-y-auto">
-      <ArrayModifierPanel layer={selected} controls={controls} />
-      <MatrixModifierPanel layer={selected} controls={controls} />
-      {selected.type !== 'fill' && (
-        <GlowModifierPanel layer={selected} controls={controls} />
+      {selected ? (
+        <>
+          <ArrayModifierPanel layer={selected} controls={controls} />
+          <MatrixModifierPanel layer={selected} controls={controls} />
+          {selected.type !== 'fill' && (
+            <GlowModifierPanel layer={selected} controls={controls} />
+          )}
+        </>
+      ) : (
+        <p className="text-slate-700 text-[10px] px-3 py-2">Select a layer.</p>
       )}
     </div>
-  ) : (
-    <p className="text-slate-700 text-[10px] px-3 py-2">Select a layer.</p>
   )
 
   const animationsContent = (
@@ -524,8 +529,8 @@ export function ControllerPage() {
         {errorBanner}
         {disconnectBanner}
 
-        {/* Canvas — 16:9 full width */}
-        <div className="w-full aspect-video bg-black shrink-0">
+        {/* Canvas — 16:9 full width, capped so landscape doesn't eat the whole screen */}
+        <div className="w-full aspect-video max-h-[45vh] bg-black shrink-0">
           <PhaserCanvas
             ref={canvasRef}
             editable
