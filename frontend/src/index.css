@@ -1,12 +1,46 @@
 @import "tailwindcss";
 @plugin "tailwindcss-animate";
+/* sans */
 @import "@fontsource-variable/outfit";
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/space-grotesk";
+@import "@fontsource-variable/raleway";
+@import "@fontsource/poppins";
+@import "@fontsource-variable/nunito";
+@import "@fontsource-variable/dm-sans";
+@import "@fontsource-variable/manrope";
+/* serif */
 @import "@fontsource-variable/playfair-display";
-@import "@fontsource/space-mono";
-@import "@fontsource/bebas-neue";
+@import "@fontsource-variable/lora";
+@import "@fontsource/merriweather";
+@import "@fontsource-variable/eb-garamond";
+@import "@fontsource/libre-baskerville";
+@import "@fontsource/pt-serif";
+@import "@fontsource/crimson-pro";
+/* handwritten */
 @import "@fontsource-variable/dancing-script";
+@import "@fontsource-variable/caveat";
+@import "@fontsource/pacifico";
+@import "@fontsource/kalam";
+@import "@fontsource/sacramento";
+@import "@fontsource/satisfy";
+@import "@fontsource/patrick-hand";
+/* monospace */
+@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/fira-code";
+@import "@fontsource-variable/source-code-pro";
+@import "@fontsource/space-mono";
+@import "@fontsource-variable/inconsolata";
+@import "@fontsource/ibm-plex-mono";
+@import "@fontsource/courier-prime";
+/* fancy */
+@import "@fontsource/bebas-neue";
+@import "@fontsource-variable/oswald";
+@import "@fontsource/abril-fatface";
+@import "@fontsource/righteous";
+@import "@fontsource/lobster";
+@import "@fontsource-variable/orbitron";
+@import "@fontsource/permanent-marker";
 
 @theme {
   --color-background: hsl(var(--background));

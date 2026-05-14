@@ -175,6 +175,12 @@ export function ControllerPage() {
     sendNow(next)
   }, [applyObjects, sendNow])
 
+  // Send-only during drag — no state/canvas update to avoid interrupting the drag
+  const onDragMove = useCallback((id: string, x: number, y: number) => {
+    const next = objectsRef.current.map((o) => (o.id === id ? { ...o, x, y } : o))
+    sendNow(next)
+  }, [sendNow])
+
   const onObjectSelect = useCallback((id: string) => setSelectedId(id), [])
 
   // ── Layer mutation ────────────────────────────────────────────────────────
@@ -272,7 +278,7 @@ export function ControllerPage() {
   return (
     <main
       className="h-screen flex flex-col bg-linear-to-br from-slate-950 to-blue-950 overflow-hidden"
-      style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif' }}
+      style={{ fontFamily: '"JetBrains Mono Variable", "JetBrains Mono", monospace' }}
     >
       <header className="flex items-center gap-3 px-4 py-3 border-b border-slate-800/60 bg-slate-950/40 backdrop-blur shrink-0">
         <Button
@@ -370,6 +376,7 @@ export function ControllerPage() {
               ref={canvasRef}
               editable
               onPositionChange={onPositionChange}
+              onDragMove={onDragMove}
               onObjectSelect={onObjectSelect}
               className="w-full h-full"
             />

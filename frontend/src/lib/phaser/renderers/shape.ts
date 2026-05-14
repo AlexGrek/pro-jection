@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import type { ShapeLayer } from '@/lib/scene'
-import { CANVAS_H, CANVAS_W, SELECTION_INT, SELECTION_WIDTH } from '../constants'
+import { CANVAS_H, CANVAS_W } from '../constants'
 import { hexToInt } from '../colors'
 import type { RenderCtx } from './types'
 
@@ -33,28 +33,17 @@ export function applyShape(ctx: RenderCtx, layer: ShapeLayer): void {
     if (ctx.editable) ctx.attachInteractive(s, layer.id)
   }
 
-  applyStyle(ctx, s, layer)
+  applyStyle(s, layer)
 }
 
-export function refreshShapeSelection(ctx: RenderCtx, layer: ShapeLayer): void {
-  const go = ctx.gameObjects.get(layer.id)
-  if (go instanceof Phaser.GameObjects.Rectangle || go instanceof Phaser.GameObjects.Ellipse) {
-    applyStyle(ctx, go, layer)
-  }
-}
-
-function applyStyle(ctx: RenderCtx, s: ShapeGO, layer: ShapeLayer): void {
+function applyStyle(s: ShapeGO, layer: ShapeLayer): void {
   const colorInt = hexToInt(layer.color)
-  const isSelected = ctx.editable && ctx.selectedId === layer.id
 
-  if (layer.filled) s.setFillStyle(colorInt)
-  else s.setFillStyle()
-
-  if (isSelected) {
-    s.setStrokeStyle(SELECTION_WIDTH, SELECTION_INT)
-  } else if (!layer.filled) {
-    s.setStrokeStyle(layer.stroke_width, colorInt)
-  } else {
+  if (layer.filled) {
+    s.setFillStyle(colorInt)
     s.setStrokeStyle()
+  } else {
+    s.setFillStyle()
+    s.setStrokeStyle(layer.stroke_width, colorInt)
   }
 }

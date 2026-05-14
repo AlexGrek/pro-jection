@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import type { TextLayer } from '@/lib/scene'
 import { DEFAULT_FONT_ID, FONT_CSS } from '@/lib/scene'
-import { CANVAS_H, CANVAS_W, SELECTION_HEX, SELECTION_WIDTH } from '../constants'
+import { CANVAS_H, CANVAS_W } from '../constants'
 import type { RenderCtx } from './types'
 
 const TEXT_DRAG_MARGIN = 80
@@ -42,18 +42,5 @@ export function applyText(ctx: RenderCtx, layer: TextLayer): void {
 
   if (ctx.editable) {
     ctx.attachInteractive(t, layer.id, { draggable: true, margin: TEXT_DRAG_MARGIN })
-    if (ctx.selectedId === layer.id) setStroke(t, true)
   }
-}
-
-export function refreshTextSelection(ctx: RenderCtx, id: string): void {
-  const go = ctx.gameObjects.get(id)
-  if (go instanceof Phaser.GameObjects.Text) {
-    setStroke(go, ctx.selectedId === id)
-  }
-}
-
-function setStroke(t: Phaser.GameObjects.Text, selected: boolean): void {
-  if (selected) t.setStroke(SELECTION_HEX, SELECTION_WIDTH)
-  else t.setStroke('#000000', 0)
 }

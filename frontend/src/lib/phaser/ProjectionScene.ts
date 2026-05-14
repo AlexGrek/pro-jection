@@ -3,8 +3,8 @@ import type { GlowModifier, Layer, Modifier, Scene } from '@/lib/scene'
 import { getArrayModifier, getGlowModifier, getMatrixModifier } from '@/lib/scene'
 import { hexToInt } from './colors'
 import { CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX, ICON_TEXTURE_PREFIX } from './constants'
-import { applyText, refreshTextSelection } from './renderers/text'
-import { applyShape, refreshShapeSelection } from './renderers/shape'
+import { applyText } from './renderers/text'
+import { applyShape } from './renderers/shape'
 import { applyFill } from './renderers/fill'
 import { applyIcon } from './renderers/icon'
 import type { InteractiveOpts, LayerObject, RenderCtx } from './renderers/types'
@@ -14,6 +14,8 @@ export { CANVAS_W, CANVAS_H } from './constants'
 
 const HINT_FONT = '"Outfit Variable", "Outfit", system-ui, sans-serif'
 
+const DRAG_SEND_INTERVAL_MS = 500
+
 /**
  * Phaser scene. Owns the GameObject map and the layer-data map, and dispatches
  * scene updates to per-type renderer modules. Renderers receive the scene as a
@@ -22,6 +24,7 @@ const HINT_FONT = '"Outfit Variable", "Outfit", system-ui, sans-serif'
 export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   editable = false
   onPositionChange?: (id: string, x: number, y: number) => void
+  onDragMove?: (id: string, x: number, y: number) => void
   onObjectSelect?: (id: string) => void
   onSceneReady?: (scene: ProjectionScene) => void
 
@@ -32,6 +35,8 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   private _glowFilters = new Map<string, Phaser.Filters.Glow>()
 
   private hint?: Phaser.GameObjects.Text
+  private _selectionGraphics?: Phaser.GameObjects.Graphics
+  _selectionAlpha = 1.0
 
   constructor() {
     super({ key: 'ProjectionScene' })
@@ -47,8 +52,46 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
           align: 'center',
         })
         .setOrigin(0.5)
+
+      this._selectionGraphics = this.add.graphics().setDepth(Number.MAX_SAFE_INTEGER)
+
+      this.tweens.add({
+        targets: this,
+        _selectionAlpha: { from: 0.35, to: 1.0 },
+        duration: 650,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      })
     }
     this.onSceneReady?.(this)
+  }
+
+  update() {
+    if (!this._selectionGraphics) return
+    this._selectionGraphics.clear()
+    if (!this.selectedId) return
+
+    const layer = this.layerData.get(this.selectedId)
+    // fills span the whole canvas — panel highlight is the indicator
+    if (!layer || layer.type === 'fill') return
+
+    const go = this.gameObjects.get(this.selectedId)
+    if (!go) return
+
+    const bounds = go.getBounds()
+    const pad = 10
+    const x = bounds.x - pad
+    const y = bounds.y - pad
+    const w = bounds.width + pad * 2
+    const h = bounds.height + pad * 2
+
+    // White outer stroke (visible on dark backgrounds)
+    this._selectionGraphics.lineStyle(5, 0xffffff, this._selectionAlpha)
+    this._selectionGraphics.strokeRect(x, y, w, h)
+    // Black inner stroke (visible on light backgrounds)
+    this._selectionGraphics.lineStyle(2, 0x000000, this._selectionAlpha * 0.75)
+    this._selectionGraphics.strokeRect(x + 4, y + 4, w - 8, h - 8)
   }
 
   applyScene(scene: Scene) {
@@ -173,12 +216,22 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
 
     if (draggable) {
       go.setInteractive({ draggable: true, cursor: 'move' })
+
+      let lastDragSendTime = 0
+
       go.on('drag', (_: Phaser.Input.Pointer, dragX: number, dragY: number) => {
-        go.setPosition(
-          Phaser.Math.Clamp(dragX, margin, CANVAS_W - margin),
-          Phaser.Math.Clamp(dragY, margin, CANVAS_H - margin),
-        )
+        const newX = Phaser.Math.Clamp(dragX, margin, CANVAS_W - margin)
+        const newY = Phaser.Math.Clamp(dragY, margin, CANVAS_H - margin)
+        go.setPosition(newX, newY)
+        this._moveClonesTo(id, newX, newY)
+
+        const now = Date.now()
+        if (now - lastDragSendTime >= DRAG_SEND_INTERVAL_MS) {
+          lastDragSendTime = now
+          this.onDragMove?.(id, newX / CANVAS_W, newY / CANVAS_H)
+        }
       })
+
       go.on('dragend', () => {
         const nx = go.x / CANVAS_W
         const ny = go.y / CANVAS_H
@@ -198,6 +251,41 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
+  private _moveClonesTo(id: string, px: number, py: number): void {
+    const layer = this.layerData.get(id)
+    if (!layer) return
+
+    const deltaX = px - layer.x * CANVAS_W
+    const deltaY = py - layer.y * CANVAS_H
+
+    const arr = getArrayModifier(layer)
+    if (arr && arr.count > 1) {
+      for (let ci = 1; ci < arr.count; ci++) {
+        const cloneId = `${id}__arr_${ci}`
+        const cloneGo = this.gameObjects.get(cloneId)
+        const cloneData = this.layerData.get(cloneId)
+        if (cloneGo && cloneData) {
+          cloneGo.setPosition(cloneData.x * CANVAS_W + deltaX, cloneData.y * CANVAS_H + deltaY)
+        }
+      }
+    }
+
+    const mat = getMatrixModifier(layer)
+    if (mat && (mat.cols > 1 || mat.rows > 1)) {
+      for (let r = 0; r < mat.rows; r++) {
+        for (let c = 0; c < mat.cols; c++) {
+          if (r === 0 && c === 0) continue
+          const cloneId = `${id}__mat_${r}_${c}`
+          const cloneGo = this.gameObjects.get(cloneId)
+          const cloneData = this.layerData.get(cloneId)
+          if (cloneGo && cloneData) {
+            cloneGo.setPosition(cloneData.x * CANVAS_W + deltaX, cloneData.y * CANVAS_H + deltaY)
+          }
+        }
+      }
+    }
+  }
+
   private _dispatchApply(layer: Layer): void {
     if (layer.type === 'text') applyText(this, layer)
     else if (layer.type === 'shape') applyShape(this, layer)
@@ -206,19 +294,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   }
 
   private _selectById(id: string | null): void {
-    if (this.selectedId === id) return
-    const prev = this.selectedId
     this.selectedId = id
-    if (prev) this._refreshSelectionStyle(prev)
-    if (id) this._refreshSelectionStyle(id)
-  }
-
-  private _refreshSelectionStyle(id: string): void {
-    const layer = this.layerData.get(id)
-    if (!layer) return
-    if (layer.type === 'text') refreshTextSelection(this, id)
-    else if (layer.type === 'shape') refreshShapeSelection(this, layer)
-    // fill: no visual selection mark — panel highlight is the indicator.
   }
 
   private _applyGlow(id: string, modifiers: Modifier[]): void {
