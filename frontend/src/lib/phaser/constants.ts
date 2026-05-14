@@ -3,3 +3,4 @@ export const CANVAS_H = 1080
 
 export const FILL_TEXTURE_PREFIX = 'fill-'
 export const ICON_TEXTURE_PREFIX = 'icon-'
+export const IMAGE_TEXTURE_PREFIX = 'img-'

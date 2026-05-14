@@ -21,6 +21,7 @@ import { GlowModifierPanel } from '@/components/controller/GlowModifierPanel'
 import { MatrixModifierPanel } from '@/components/controller/MatrixModifierPanel'
 import { FillProperties } from '@/components/controller/FillProperties'
 import { IconProperties } from '@/components/controller/IconProperties'
+import { ImageProperties } from '@/components/controller/ImageProperties'
 import { LayerRow } from '@/components/controller/LayerRow'
 import { PropertyRow } from '@/components/controller/PropertyRow'
 import { ShapeProperties } from '@/components/controller/ShapeProperties'
@@ -30,10 +31,12 @@ import {
   DEFAULT_CIRCLE_LAYER,
   DEFAULT_FILL_LAYER,
   DEFAULT_ICON_LAYER,
+  DEFAULT_IMAGE_LAYER,
   DEFAULT_RECT_LAYER,
   DEFAULT_TEXT_LAYER,
   type FillLayer,
   type IconLayer,
+  type ImageLayer,
   type Layer,
   type Scene,
   type ShapeLayer,
@@ -260,6 +263,7 @@ export function ControllerPage() {
   const addRectangle = () => addLayerAtEnd({ ...DEFAULT_RECT_LAYER,   id: crypto.randomUUID() } as ShapeLayer)
   const addCircle    = () => addLayerAtEnd({ ...DEFAULT_CIRCLE_LAYER, id: crypto.randomUUID() } as ShapeLayer)
   const addIcon      = () => addLayerAtEnd({ ...DEFAULT_ICON_LAYER,   id: crypto.randomUUID() } as IconLayer)
+  const addImage     = () => addLayerAtEnd({ ...DEFAULT_IMAGE_LAYER,  id: crypto.randomUUID() } as ImageLayer)
 
   const addFill = () => {
     const newLayer: FillLayer = {
@@ -341,8 +345,9 @@ export function ControllerPage() {
       {selected.type === 'shape' && <ShapeProperties layer={selected} controls={controls} />}
       {selected.type === 'fill'  && <FillProperties  layer={selected} controls={controls} />}
       {selected.type === 'icon'  && <IconProperties  layer={selected} controls={controls} />}
+      {selected.type === 'image' && <ImageProperties layer={selected} controls={controls} />}
 
-      {selected.type !== 'fill' && (
+      {selected.type !== 'fill' && selected.type !== 'image' && (
         <PropertyRow label="Color">
           <input
             type="color"
@@ -574,6 +579,7 @@ export function ControllerPage() {
               onAddCircle={addCircle}
               onAddFill={addFill}
               onAddIcon={addIcon}
+              onAddImage={addImage}
             />
           )}
         </div>
@@ -700,6 +706,7 @@ export function ControllerPage() {
               onAddCircle={addCircle}
               onAddFill={addFill}
               onAddIcon={addIcon}
+              onAddImage={addImage}
             />
           </div>
         </div>

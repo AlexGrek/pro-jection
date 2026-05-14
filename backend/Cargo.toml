@@ -9,7 +9,8 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0"
-axum = { version = "0.8", features = ["ws"] }
+axum = { version = "0.8", features = ["ws", "multipart"] }
+uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15"
 env_logger = "0.11"

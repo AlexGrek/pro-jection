@@ -1,3 +1,4 @@
+pub mod assets;
 pub mod health;
 pub mod history;
 pub mod sessions;

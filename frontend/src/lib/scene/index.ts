@@ -10,6 +10,7 @@ import type { TextLayer } from './text'
 import type { ShapeLayer } from './shape'
 import type { FillLayer } from './fill'
 import type { IconLayer } from './icon'
+import type { ImageLayer } from './image'
 
 export * from './base'
 export * from './fonts'
@@ -17,9 +18,10 @@ export * from './text'
 export * from './shape'
 export * from './fill'
 export * from './icon'
+export * from './image'
 
 /** Union of all known layer types. Grows as new types are added. */
-export type Layer = TextLayer | ShapeLayer | FillLayer | IconLayer
+export type Layer = TextLayer | ShapeLayer | FillLayer | IconLayer | ImageLayer
 
 /** A full slide: an ordered list of layers. */
 export interface Scene {
