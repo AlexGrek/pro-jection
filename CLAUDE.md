@@ -25,6 +25,8 @@ Sessions (controller ↔ projector pairs) live in server RAM only and are never 
   - `GET /api/sessions/{code}/history` — full history array + cursor ([history.rs](backend/src/routes/history.rs))
   - `POST /api/sessions/{code}/history/undo` — step cursor back, broadcast ([history.rs](backend/src/routes/history.rs))
   - `POST /api/sessions/{code}/history/redo` — step cursor forward, broadcast ([history.rs](backend/src/routes/history.rs))
+  - `POST /api/useruploads` — multipart image upload (png/jpg/webp/svg, 20 MB max), stores via OpenDAL, returns URL ([assets.rs](backend/src/routes/assets.rs))
+  - `GET /api/useruploads/{key}` — serve uploaded image from OpenDAL ([assets.rs](backend/src/routes/assets.rs))
   - `/assets/*` → ServeDir (no fallback, so a missing hashed chunk 404s cleanly)
   - everything else → SPA fallback to `index.html`
 - Env vars (with defaults): `HOST=0.0.0.0`, `PORT=8080`, `STORAGE_CONFIG=config/storage.yaml`, `STATIC_DIR=../frontend/dist`, `CORS_ALLOWED_ORIGINS=` (comma-separated).
@@ -73,9 +75,9 @@ Clients distinguish server events from scene updates by checking for a known `ty
 
 Type-specific UI lives under [components/controller/](frontend/src/components/controller/). Each property panel takes `{ layer, controls }` where `controls: PropertyControls` bundles the mutation/send helpers ([types.ts](frontend/src/components/controller/types.ts)):
 
-- [TextProperties.tsx](frontend/src/components/controller/TextProperties.tsx) · [ShapeProperties.tsx](frontend/src/components/controller/ShapeProperties.tsx) · [FillProperties.tsx](frontend/src/components/controller/FillProperties.tsx)
+- [TextProperties.tsx](frontend/src/components/controller/TextProperties.tsx) · [ShapeProperties.tsx](frontend/src/components/controller/ShapeProperties.tsx) · [FillProperties.tsx](frontend/src/components/controller/FillProperties.tsx) · [IconProperties.tsx](frontend/src/components/controller/IconProperties.tsx) · [ImageProperties.tsx](frontend/src/components/controller/ImageProperties.tsx)
 - [LayerRow.tsx](frontend/src/components/controller/LayerRow.tsx) — single row in the Layers panel with reorder buttons (front/forward/backward/back).
-- [AddObjectPanel.tsx](frontend/src/components/controller/AddObjectPanel.tsx) — Text / Rectangle / Circle / Background buttons.
+- [AddObjectPanel.tsx](frontend/src/components/controller/AddObjectPanel.tsx) — Text / Rectangle / Circle / Background / Icon / Image buttons.
 - [PropertyRow.tsx](frontend/src/components/controller/PropertyRow.tsx) — shared label/content row layout.
 
 Send timing per input kind:
@@ -99,10 +101,12 @@ lib/scene/
 ├── fonts.ts    # FONT_OPTIONS (7 fonts), FontId, FONT_CSS
 ├── text.ts     # TextLayer + DEFAULT_TEXT_LAYER
 ├── shape.ts    # ShapeLayer (rectangle | circle, filled or outlined) + DEFAULT_RECT_LAYER + DEFAULT_CIRCLE_LAYER
-└── fill.ts     # FillLayer (solid | linear gradient with rgba stops) + DEFAULT_FILL_LAYER
+├── fill.ts     # FillLayer (solid | linear gradient with rgba stops) + DEFAULT_FILL_LAYER
+├── icon.ts     # IconLayer + DEFAULT_ICON_LAYER
+└── image.ts    # ImageLayer (url + width; height from aspect ratio) + DEFAULT_IMAGE_LAYER
 ```
 
-`BaseLayer` carries `id`, `x` and `y` (0–1), `opacity` (0–1), `animations: {}`, and `modifiers: []`. `Layer` is the discriminated union of `TextLayer | ShapeLayer | FillLayer`. Adding a new layer type means: add a file under `lib/scene/`, extend the `Layer` union in `index.ts`, add a renderer under `lib/phaser/renderers/`, and add a Properties component under `components/controller/`.
+`BaseLayer` carries `id`, `x` and `y` (0–1), `opacity` (0–1), `animations: {}`, and `modifiers: []`. `Layer` is the discriminated union of `TextLayer | ShapeLayer | FillLayer | IconLayer | ImageLayer`. Adding a new layer type means: add a file under `lib/scene/`, extend the `Layer` union in `index.ts`, add a renderer under `lib/phaser/renderers/`, and add a Properties component under `components/controller/`. See [images.md](images.md) for a worked example.
 
 ## Phaser integration
 
