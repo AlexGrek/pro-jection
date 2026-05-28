@@ -52,12 +52,6 @@ type ServerEvent =
   | { type: 'controller_status'; connected: boolean }
   | { type: 'error'; message: string }
 
-const STATUS_STYLES: Record<ConnState, string> = {
-  connecting: 'bg-yellow-900/50 text-yellow-400',
-  connected: 'bg-green-900/50 text-green-400',
-  disconnected: 'bg-slate-800 text-slate-500',
-  error: 'bg-red-900/50 text-red-400',
-}
 
 const TEXT_DEBOUNCE_MS = 350
 
@@ -725,8 +719,20 @@ export function ControllerPage() {
           </div>
         </div>
         <code className="font-mono tracking-[0.2em] text-slate-300 text-sm">{code}</code>
-        <span className={`text-xs px-2 py-0.5 rounded-full font-light ${STATUS_STYLES[connState]}`}>
-          {connState}
+        <span className="flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${
+            connState === 'connected'  ? 'bg-green-400' :
+            connState === 'connecting' ? 'bg-yellow-400' :
+            connState === 'error'      ? 'bg-red-400' :
+                                         'bg-slate-600'
+          }`} />
+          {connState !== 'connected' && (
+            <span className={`text-xs font-light ${
+              connState === 'connecting' ? 'text-yellow-400' :
+              connState === 'error'      ? 'text-red-400' :
+                                           'text-slate-500'
+            }`}>{connState}</span>
+          )}
         </span>
       </header>
 
@@ -738,7 +744,7 @@ export function ControllerPage() {
         {/* Top row: canvas + layers panel */}
         <div className="flex-1 min-h-0 flex overflow-hidden">
 
-          <div className="flex-1 min-w-0 bg-black overflow-hidden">
+          <div className="flex-1 min-w-0 bg-black overflow-hidden ring-1 ring-white/10">
             <PhaserCanvas
               ref={canvasRef}
               editable

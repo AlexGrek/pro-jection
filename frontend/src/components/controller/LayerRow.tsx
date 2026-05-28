@@ -36,8 +36,8 @@ export function LayerRow({ layer, idx, total, selected, onSelect, onMove, onDele
     <div
       className={`flex items-center gap-0.5 pl-2 pr-1 py-1 rounded border transition-colors ${
         selected
-          ? 'bg-blue-500/10 border-blue-500/30 text-white'
-          : 'bg-slate-800/30 border-slate-700/20 text-slate-400 hover:text-white hover:bg-slate-800/50'
+          ? 'bg-blue-500/10 border-blue-500 text-white'
+          : 'bg-slate-800/20 border-white/5 text-slate-400 hover:text-white hover:bg-slate-800/40 hover:border-white/10'
       }`}
     >
       <button
