@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react'
-import { Input } from '@/components/ui/input'
 import { FONT_CSS, FONT_OPTIONS, type FontId, type TextLayer } from '@/lib/scene'
 import { PropertyRow } from './PropertyRow'
 import { FontPickerModal } from './FontPickerModal'
@@ -26,13 +25,14 @@ export function TextProperties({ layer, controls, autoFocus }: Props) {
 
   return (
     <>
-      <Input
+      <textarea
         autoFocus={autoFocus}
         value={layer.text}
         onChange={(e) => sendDebounced(patch({ text: e.target.value }))}
         placeholder="Text…"
         disabled={disabled}
-        className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600 font-light text-xs h-7 px-2"
+        rows={3}
+        className="w-full resize-y bg-slate-900 border border-slate-700 rounded text-white placeholder:text-slate-600 font-light text-xs px-2 py-1.5 disabled:opacity-40 focus:outline-none focus:border-blue-500"
       />
 
       <PropertyRow label="Font">

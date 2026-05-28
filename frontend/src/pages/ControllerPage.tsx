@@ -6,6 +6,7 @@ import {
   IconDeviceGamepad2,
   IconDownload,
   IconExternalLink,
+  IconKeyboard,
   IconPlayerPlay,
   IconRefresh,
   IconAdjustmentsHorizontal,
@@ -22,6 +23,7 @@ import { MatrixModifierPanel } from '@/components/controller/MatrixModifierPanel
 import { FillProperties } from '@/components/controller/FillProperties'
 import { IconProperties } from '@/components/controller/IconProperties'
 import { ImageProperties } from '@/components/controller/ImageProperties'
+import { HotkeysMenu } from '@/components/controller/HotkeysMenu'
 import { LayerRow } from '@/components/controller/LayerRow'
 import { PropertyRow } from '@/components/controller/PropertyRow'
 import { ShapeProperties } from '@/components/controller/ShapeProperties'
@@ -124,6 +126,7 @@ export function ControllerPage() {
   const [objects, setObjects] = useState<Layer[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [justAddedTextId, setJustAddedTextId] = useState<string | null>(null)
+  const [hotkeysOpen, setHotkeysOpen] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const canvasRef = useRef<PhaserCanvasHandle>(null)
@@ -131,6 +134,8 @@ export function ControllerPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const objectsRef = useRef<Layer[]>(objects)
   useEffect(() => { objectsRef.current = objects }, [objects])
+  const selectedIdRef = useRef<string | null>(null)
+  useEffect(() => { selectedIdRef.current = selectedId }, [selectedId])
 
   const selected = objects.find((o) => o.id === selectedId) ?? null
 
@@ -138,11 +143,11 @@ export function ControllerPage() {
   const [activeTab, setActiveTab] = useState<MobileTab>('layers')
 
   // ── Panel sizes ───────────────────────────────────────────────────────────
-  const [bottomH, setBottomH] = useState(220)
+  const [bottomH, setBottomH] = useState(280)
   const [layersW, setLayersW] = useState(200)
-  const [propsW, setPropsW] = useState(210)
-  const [modsW, setModsW] = useState(180)
-  const [addW, setAddW] = useState(160)
+  const [propsW, setPropsW] = useState(260)
+  const [modsW, setModsW] = useState(220)
+  const [addW, setAddW] = useState(180)
 
   const resizeBottomH = useCallback((d: number) => setBottomH(h => Math.max(80, Math.min(700, h - d))), [])
   const resizeLayersW = useCallback((d: number) => setLayersW(w => Math.max(120, Math.min(600, w - d))), [])
@@ -235,7 +240,27 @@ export function ControllerPage() {
     return next
   }, [selectedId, applyObjects])
 
-  const moveLayer = (from: number, to: number) => {
+  const duplicateLayer = useCallback((id: string) => {
+    const src = objectsRef.current.find((o) => o.id === id)
+    if (!src) return
+    const copy = { ...src, id: crypto.randomUUID(), x: src.x + 0.02, y: src.y + 0.02 }
+    const srcIdx = objectsRef.current.findIndex((o) => o.id === id)
+    const next = [...objectsRef.current]
+    next.splice(srcIdx + 1, 0, copy)
+    applyObjects(next)
+    setSelectedId(copy.id)
+    canvasRef.current?.selectObject(copy.id)
+    sendNow(next)
+  }, [applyObjects, sendNow])
+
+  const deleteLayer = useCallback((id: string) => {
+    const next = objectsRef.current.filter((o) => o.id !== id)
+    setSelectedId((prev) => (prev === id ? null : prev))
+    applyObjects(next)
+    sendNow(next)
+  }, [applyObjects, sendNow])
+
+  const moveLayer = useCallback((from: number, to: number) => {
     if (from === to) return
     const max = objectsRef.current.length - 1
     const target = Math.max(0, Math.min(max, to))
@@ -244,7 +269,38 @@ export function ControllerPage() {
     next.splice(target, 0, item)
     applyObjects(next)
     sendNow(next)
-  }
+  }, [applyObjects, sendNow])
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return
+      const sid = selectedIdRef.current
+      const isMod = e.metaKey || e.ctrlKey
+      if ((e.key === 'Delete' || e.key === 'Backspace') && sid) {
+        e.preventDefault()
+        deleteLayer(sid)
+      } else if (isMod && e.key.toLowerCase() === 'd' && sid) {
+        e.preventDefault()
+        duplicateLayer(sid)
+      } else if ((e.key === ']' || e.key === '[') && !isMod && sid) {
+        e.preventDefault()
+        const idx = objectsRef.current.findIndex((o) => o.id === sid)
+        if (idx === -1) return
+        const total = objectsRef.current.length
+        const to = e.key === ']'
+          ? (e.shiftKey ? total - 1 : idx + 1)
+          : (e.shiftKey ? 0 : idx - 1)
+        moveLayer(idx, to)
+      } else if (e.key === 'Escape' && sid) {
+        setSelectedId(null)
+        canvasRef.current?.selectObject(null)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [deleteLayer, duplicateLayer, moveLayer])
 
   const selectLayer = (id: string) => {
     setSelectedId(id)
@@ -341,6 +397,8 @@ export function ControllerPage() {
           selected={layer.id === selectedId}
           onSelect={() => selectLayer(layer.id)}
           onMove={(target) => moveLayer(idx, target)}
+          onDuplicate={() => duplicateLayer(layer.id)}
+          onDelete={() => deleteLayer(layer.id)}
         />
       ))}
     </div>
@@ -528,6 +586,18 @@ export function ControllerPage() {
             >
               <IconExternalLink size={15} stroke={1.5} />
             </Button>
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`px-2 ${hotkeysOpen ? 'text-white bg-slate-800' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                title="Hotkeys"
+                onClick={() => setHotkeysOpen((o) => !o)}
+              >
+                <IconKeyboard size={15} stroke={1.5} />
+              </Button>
+              {hotkeysOpen && <HotkeysMenu onClose={() => setHotkeysOpen(false)} />}
+            </div>
           </div>
           <code className="font-mono tracking-[0.15em] text-slate-400 text-[11px]">{code}</code>
           <span className={`w-2 h-2 rounded-full shrink-0 ${
@@ -641,6 +711,18 @@ export function ControllerPage() {
           >
             <IconExternalLink size={15} stroke={1.5} />
           </Button>
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`px-2 ${hotkeysOpen ? 'text-white bg-slate-800' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+              title="Hotkeys"
+              onClick={() => setHotkeysOpen((o) => !o)}
+            >
+              <IconKeyboard size={15} stroke={1.5} />
+            </Button>
+            {hotkeysOpen && <HotkeysMenu onClose={() => setHotkeysOpen(false)} />}
+          </div>
         </div>
         <code className="font-mono tracking-[0.2em] text-slate-300 text-sm">{code}</code>
         <span className={`text-xs px-2 py-0.5 rounded-full font-light ${STATUS_STYLES[connState]}`}>

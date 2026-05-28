@@ -101,9 +101,9 @@ export function FontPickerModal({ currentFontId, onSelect, onClose }: FontPicker
 
   return (
     <div className="fixed inset-0 z-50 sm:flex sm:items-center sm:justify-center">
-      {/* Backdrop */}
+      {/* Backdrop — fixed so it covers & blocks the Phaser canvas on all screen sizes */}
       <div
-        className={`hidden sm:block absolute inset-0 bg-black/60 transition-opacity duration-150 ${visible ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-black/60 transition-opacity duration-150 ${visible ? 'opacity-100' : 'opacity-0'}`}
         onClick={handleClose}
       />
 

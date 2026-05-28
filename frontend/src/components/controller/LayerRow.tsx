@@ -8,7 +8,9 @@ import {
   IconCircle,
   IconLetterT,
   IconPhoto,
+  IconCopy,
   IconSquare,
+  IconTrash,
   IconVectorSpline,
 } from '@tabler/icons-react'
 import type { Layer } from '@/lib/scene'
@@ -22,9 +24,11 @@ interface Props {
   selected: boolean
   onSelect: () => void
   onMove: (target: number) => void
+  onDelete: () => void
+  onDuplicate: () => void
 }
 
-export function LayerRow({ layer, idx, total, selected, onSelect, onMove }: Props) {
+export function LayerRow({ layer, idx, total, selected, onSelect, onMove, onDelete, onDuplicate }: Props) {
   const isFront = idx === total - 1
   const isBack = idx === 0
 
@@ -67,6 +71,24 @@ export function LayerRow({ layer, idx, total, selected, onSelect, onMove }: Prop
         disabled={isBack}
         onClick={() => onMove(0)}
       />
+      <button
+        type="button"
+        onClick={onDuplicate}
+        title="Duplicate layer"
+        aria-label="Duplicate layer"
+        className="shrink-0 p-0.5 rounded text-slate-500 hover:text-white hover:bg-slate-700/60"
+      >
+        <IconCopy size={12} stroke={1.5} />
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        title="Delete layer"
+        aria-label="Delete layer"
+        className="shrink-0 p-0.5 rounded text-slate-600 hover:text-red-400 hover:bg-red-950/40"
+      >
+        <IconTrash size={12} stroke={1.5} />
+      </button>
     </div>
   )
 }
