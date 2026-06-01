@@ -119,3 +119,38 @@ body {
   color: hsl(var(--foreground));
   font-family: 'Outfit Variable', sans-serif;
 }
+
+/* Gradient-track sliders for the custom ColorPicker. The element's inline
+   `background` (a gradient) shows as the track; the thumb floats on top. */
+.color-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 12px;
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+  touch-action: none;
+}
+.color-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+.color-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+.color-slider::-moz-range-track {
+  background: transparent;
+}

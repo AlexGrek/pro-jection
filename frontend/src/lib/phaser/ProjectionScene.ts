@@ -1,8 +1,9 @@
 import Phaser from 'phaser'
 import type { GlowModifier, Layer, Modifier, Scene } from '@/lib/scene'
 import { getArrayModifier, getGlowModifier, getMatrixModifier } from '@/lib/scene'
+import { GLOW_PERIOD_MAX, GLOW_PERIOD_MIN } from '@/lib/scene'
 import { hexToInt } from './colors'
-import { CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX } from './constants'
+import { CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX } from './constants'
 import { applyText } from './renderers/text'
 import { applyShape } from './renderers/shape'
 import { applyFill } from './renderers/fill'
@@ -59,6 +60,11 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   }
 
   update() {
+    this._updateGlowAnimations()
+    this._updateSelection()
+  }
+
+  private _updateSelection() {
     if (!this._selectionGraphics) return
     this._selectionGraphics.clear()
     if (!this.selectedId) return
@@ -288,6 +294,32 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
 
   private _selectById(id: string | null): void {
     this.selectedId = id
+  }
+
+  /**
+   * Per-frame breathing of glow filters. Layers carrying a `glow` animation have
+   * their filter strength oscillated between `GLOW_BREATH_MIN` and the modifier's
+   * configured strength on a sine over the configured period. `applyScene` resets
+   * the strength to its static value whenever the animation is absent, so removing
+   * the animation snaps the glow back automatically.
+   */
+  private _updateGlowAnimations(): void {
+    if (this._glowFilters.size === 0) return
+    const now = this.time.now
+    for (const [id, filter] of this._glowFilters) {
+      const layer = this.layerData.get(id)
+      const anim = layer?.animations.glow
+      if (!layer || !anim) continue
+      const glowMod = getGlowModifier(layer)
+      if (!glowMod) continue
+
+      const periodMs = Phaser.Math.Clamp(anim.period, GLOW_PERIOD_MIN, GLOW_PERIOD_MAX) * 1000
+      // 0 at the start of each cycle, 1 at the half-period — a smooth in/out breath.
+      const breath = 0.5 - 0.5 * Math.cos((now % periodMs) / periodMs * Math.PI * 2)
+      const factor = GLOW_BREATH_MIN + (1 - GLOW_BREATH_MIN) * breath
+      filter.outerStrength = glowMod.outer_strength * factor
+      filter.innerStrength = glowMod.inner_strength * factor
+    }
   }
 
   private _applyGlow(id: string, modifiers: Modifier[]): void {

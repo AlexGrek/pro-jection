@@ -1,5 +1,6 @@
 import type { GlowModifier, Layer } from '@/lib/scene'
 import { getGlowModifier } from '@/lib/scene'
+import { ColorPicker } from './ColorPicker'
 import { PropertyRow } from './PropertyRow'
 import type { PropertyControls } from './types'
 
@@ -17,7 +18,7 @@ const DEFAULT_GLOW: GlowModifier = {
 }
 
 export function GlowModifierPanel({ layer, controls }: Props) {
-  const { patch, sendNow, sendCurrent, disabled } = controls
+  const { patch, sendNow, sendDebounced, sendCurrent, disabled } = controls
   const glow = getGlowModifier(layer)
 
   const patchGlow = (update: Partial<GlowModifier>): Layer[] => {
@@ -66,13 +67,11 @@ export function GlowModifierPanel({ layer, controls }: Props) {
       </div>
 
       <PropertyRow label="Color">
-        <input
-          type="color"
+        <ColorPicker
           value={glow.color}
-          onChange={(e) => patchGlow({ color: e.target.value })}
-          onBlur={sendCurrent}
+          onChange={(hex) => sendDebounced(patchGlow({ color: hex }))}
+          onCommit={(hex) => sendNow(patchGlow({ color: hex }))}
           disabled={disabled}
-          className="w-7 h-6 rounded cursor-pointer border border-slate-700 bg-transparent disabled:opacity-40"
         />
       </PropertyRow>
 

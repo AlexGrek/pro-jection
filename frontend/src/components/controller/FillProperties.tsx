@@ -1,4 +1,5 @@
 import type { ColorStop, FillKind, FillLayer } from '@/lib/scene'
+import { ColorPicker } from './ColorPicker'
 import { PropertyRow } from './PropertyRow'
 import type { PropertyControls } from './types'
 
@@ -8,7 +9,7 @@ interface Props {
 }
 
 export function FillProperties({ layer, controls }: Props) {
-  const { patch, sendNow, sendCurrent, disabled } = controls
+  const { patch, sendNow, sendDebounced, sendCurrent, disabled } = controls
 
   const patchStop = (i: number, p: Partial<ColorStop>) => {
     const stops = layer.stops.map((s, idx) => (idx === i ? { ...s, ...p } : s))
@@ -51,13 +52,11 @@ export function FillProperties({ layer, controls }: Props) {
         return (
           <div key={i} className="flex items-center gap-1.5">
             <span className="text-slate-500 text-[10px] w-10 shrink-0">Stop {i + 1}</span>
-            <input
-              type="color"
+            <ColorPicker
               value={stop.color}
-              onChange={(e) => patchStop(i, { color: e.target.value })}
-              onBlur={sendCurrent}
+              onChange={(hex) => sendDebounced(patchStop(i, { color: hex }))}
+              onCommit={(hex) => sendNow(patchStop(i, { color: hex }))}
               disabled={disabled}
-              className="w-7 h-6 rounded cursor-pointer border border-slate-700 bg-transparent disabled:opacity-40 shrink-0"
             />
             <input
               type="range"

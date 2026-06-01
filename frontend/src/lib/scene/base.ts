@@ -1,6 +1,14 @@
-/** Extensible per-layer animation spec. Always `{}` in the current version. */
+/** "Breathing" pulse of the layer's glow modifier. Requires a glow modifier to have any effect. */
+export interface GlowAnimation {
+  /** Full breathe-in/breathe-out period in seconds (0.5–4). */
+  period: number
+}
+
+/** Extensible per-layer animation spec. */
 export interface Animations {
-  // future: { enter?: ..., exit?: ..., loop?: ... }
+  /** Pulses the glow modifier's strength in and out. */
+  glow?: GlowAnimation
+  // future: enter / exit / move …
 }
 
 export interface ArrayModifier {
@@ -72,3 +80,10 @@ export interface BaseLayer {
 }
 
 export const DEFAULT_ANIMATIONS: Animations = {}
+
+/** Default glow-breathing spec: a calm ~1 s pulse. Period range is 0.5–4 s. */
+export const DEFAULT_GLOW_ANIMATION: GlowAnimation = { period: 1 }
+
+/** Inclusive bounds for the glow-breathing period slider, in seconds. */
+export const GLOW_PERIOD_MIN = 0.5
+export const GLOW_PERIOD_MAX = 4

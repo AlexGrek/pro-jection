@@ -86,7 +86,7 @@ Send timing per input kind:
 | Text input | `sendDebounced` (350 ms) |
 | Font / Shape / Fill kind / Add layer / Reorder / Drag-end | `sendNow` immediate |
 | Sliders (size, alpha, width, height, stroke, angle, stop alpha) | preview on `onChange`, `sendCurrent` on `onPointerUp` / `onKeyUp` |
-| Color picker | preview on `onChange`, `sendCurrent` on `onBlur` |
+| Color picker ([ColorPicker.tsx](frontend/src/components/controller/ColorPicker.tsx)) | `sendDebounced` (350 ms) while tuning (slider drag / hex typing / system-picker drag) via `onChange(hex)`; `sendNow` on release / swatch click / hex blur / system close / popover dismiss via `onCommit(hex)` |
 
 The layers panel renders in **reverse** array order so top-of-panel = front-of-stack (Photoshop convention). `moveLayer(from, to)` operates on real array indices.
 
@@ -154,5 +154,5 @@ Summary: `GET /api/sessions/{code}/history` returns the full stack and cursor; `
 - The projector page auto-reconnects; the controller page does not (manual reconnect button only, to surface the "already connected" error clearly).
 - Phaser game instances are owned by `PhaserCanvas` and destroyed on unmount. Never call `game.destroy()` from outside the component. Communicate with the scene exclusively through `PhaserCanvasHandle` (`applyScene`, `selectObject`, `getScene`).
 - Don't add Phaser audio, physics, or asset loaders. Visual layers are confined to text / shape / fill — extend by adding a new file under [lib/scene/](frontend/src/lib/scene/) plus a matching renderer in [lib/phaser/renderers/](frontend/src/lib/phaser/renderers/), not by reaching into the existing renderers.
-- Auto-send is the contract: never reintroduce a Send button. Mutations always go `patch → applyObjects → sendNow/sendDebounced/sendCurrent`. Sliders and color pickers preview on `onChange` and commit on release/blur — don't send during continuous input.
+- Auto-send is the contract: never reintroduce a Send button. Mutations always go `patch → applyObjects → sendNow/sendDebounced/sendCurrent`. Sliders preview on `onChange` and commit on release/blur — don't send during continuous input. The colour picker is the exception: it **streams debounced sends while tuning** (`onChange → sendDebounced`) and flushes an immediate `sendNow` on commit. Because its `onCommit(hex)` carries the final hex, callers send the freshly-`patch`ed array directly (`sendNow(patch({ color: hex }))`) rather than `sendCurrent` — `objectsRef` lags a render, so a synchronous swatch/system commit via `sendCurrent` would send the previous colour.
 - The Vite proxy must cover `/api` as well as `/ws` and `/health` paths.

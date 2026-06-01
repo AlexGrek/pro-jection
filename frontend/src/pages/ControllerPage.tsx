@@ -18,6 +18,8 @@ import { Button } from '@/components/ui/button'
 import { PhaserCanvas, type PhaserCanvasHandle } from '@/components/PhaserCanvas'
 import { AddObjectPanel } from '@/components/controller/AddObjectPanel'
 import { ArrayModifierPanel } from '@/components/controller/ArrayModifierPanel'
+import { ColorPicker } from '@/components/controller/ColorPicker'
+import { GlowAnimationPanel } from '@/components/controller/GlowAnimationPanel'
 import { GlowModifierPanel } from '@/components/controller/GlowModifierPanel'
 import { MatrixModifierPanel } from '@/components/controller/MatrixModifierPanel'
 import { FillProperties } from '@/components/controller/FillProperties'
@@ -408,13 +410,11 @@ export function ControllerPage() {
 
       {selected.type !== 'fill' && selected.type !== 'image' && (
         <PropertyRow label="Color">
-          <input
-            type="color"
+          <ColorPicker
             value={selected.color}
-            onChange={(e) => patchSelected({ color: e.target.value })}
-            onBlur={sendCurrent}
+            onChange={(hex) => sendDebounced(patchSelected({ color: hex }))}
+            onCommit={(hex) => sendNow(patchSelected({ color: hex }))}
             disabled={connState !== 'connected'}
-            className="w-7 h-6 rounded cursor-pointer border border-slate-700 bg-transparent disabled:opacity-40"
           />
         </PropertyRow>
       )}
@@ -469,24 +469,15 @@ export function ControllerPage() {
   )
 
   const animationsContent = (
-    <div className="flex-1 min-h-0 overflow-y-auto p-2">
+    <div className="flex-1 min-h-0 overflow-y-auto">
       {selected ? (
-        Object.keys(selected.animations).length === 0 ? (
-          <p className="text-slate-700 text-[10px] px-1 py-1 italic">No animations.</p>
+        selected.type !== 'fill' ? (
+          <GlowAnimationPanel layer={selected} controls={controls} />
         ) : (
-          <div className="space-y-1">
-            {Object.keys(selected.animations).map((k) => (
-              <div
-                key={k}
-                className="px-2 py-1 rounded bg-slate-800/40 border border-slate-700/20 text-xs text-slate-400 font-light"
-              >
-                {k}
-              </div>
-            ))}
-          </div>
+          <p className="text-slate-700 text-[10px] px-3 py-2 italic">No animations for fills.</p>
         )
       ) : (
-        <p className="text-slate-700 text-[10px] px-1 py-1">Select a layer.</p>
+        <p className="text-slate-700 text-[10px] px-3 py-2">Select a layer.</p>
       )}
     </div>
   )
