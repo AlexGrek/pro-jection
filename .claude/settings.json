@@ -26,7 +26,8 @@
       "Bash(awk 'NR>=11618 && NR<=11640' /Users/vedmedik/dev/pro-jection/frontend/node_modules/phaser/types/phaser.d.ts)",
       "Bash(npx vite *)",
       "Bash(npm info *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(task ship *)"
     ],
     "additionalDirectories": [
       "/tmp"

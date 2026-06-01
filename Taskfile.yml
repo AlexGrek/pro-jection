@@ -115,6 +115,19 @@ tasks:
   ship:
     desc: Build + push image, then deploy
     cmds:
+      - cmd: |
+          cat <<'SHIP'
+                                 |    |    |
+                                )_)  )_)  )_)
+                               )___))___))___)\
+                              )____)____)_____)\\
+                            _____|____|____|____\\\__
+                   ---------\                   /---------
+            ^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+              ^^^^      ^^^^     ^^^    ^^     ^^^^    ^^^
+                   ^^^^      ^^^^^^^^      ^^^    ^^^^^
+          SHIP
+          echo "==> Shipping pro-jection..."
       - task: frontend:install
       - task: docker:release
       - task: deploy
