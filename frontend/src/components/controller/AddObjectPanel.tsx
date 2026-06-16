@@ -3,6 +3,7 @@ import {
   IconBackground,
   IconBarcode,
   IconCircle,
+  IconGridDots,
   IconLetterT,
   IconMovie,
   IconPhoto,
@@ -20,9 +21,10 @@ interface Props {
   onAddImage: () => void
   onAddVideo: () => void
   onAddBarcode: () => void
+  onAddRays: () => void
 }
 
-export function AddObjectPanel({ disabled, onAddText, onAddRectangle, onAddCircle, onAddFill, onAddIcon, onAddImage, onAddVideo, onAddBarcode }: Props) {
+export function AddObjectPanel({ disabled, onAddText, onAddRectangle, onAddCircle, onAddFill, onAddIcon, onAddImage, onAddVideo, onAddBarcode, onAddRays }: Props) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
@@ -37,6 +39,7 @@ export function AddObjectPanel({ disabled, onAddText, onAddRectangle, onAddCircl
         <AddButton disabled={disabled} icon={<IconPhoto size={13} />} label="Image" onClick={onAddImage} />
         <AddButton disabled={disabled} icon={<IconMovie size={13} />} label="Video" onClick={onAddVideo} />
         <AddButton disabled={disabled} icon={<IconBarcode size={13} />} label="Barcode" onClick={onAddBarcode} />
+        <AddButton disabled={disabled} icon={<IconGridDots size={13} />} label="Rays" onClick={onAddRays} />
       </div>
     </div>
   )

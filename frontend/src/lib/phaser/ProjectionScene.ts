@@ -3,7 +3,7 @@ import type { GlowModifier, GridSettings, Layer, Modifier, Scene } from '@/lib/s
 import { getArrayModifier, getGlowModifier, getMatrixModifier } from '@/lib/scene'
 import { GLOW_PERIOD_MAX, GLOW_PERIOD_MIN } from '@/lib/scene'
 import { hexToInt } from './colors'
-import { BARCODE_TEXTURE_PREFIX, CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, GRID_DEPTH, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX } from './constants'
+import { BARCODE_TEXTURE_PREFIX, CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, GRID_DEPTH, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, RAYS_TEXTURE_PREFIX } from './constants'
 import { applyText } from './renderers/text'
 import { applyShape } from './renderers/shape'
 import { applyFill } from './renderers/fill'
@@ -11,6 +11,7 @@ import { applyIcon } from './renderers/icon'
 import { applyImage, cleanupImage } from './renderers/image'
 import { applyVideo, cleanupVideo } from './renderers/video'
 import { applyBarcode, cleanupBarcode } from './renderers/barcode'
+import { applyRays } from './renderers/rays'
 import { drawGrid } from './renderers/grid'
 import type { InteractiveOpts, LayerObject, RenderCtx } from './renderers/types'
 
@@ -90,8 +91,9 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     if (!this.selectedId) return
 
     const layer = this.layerData.get(this.selectedId)
-    // fills span the whole canvas — panel highlight is the indicator
+    // fills and fullscreen rays span the whole canvas — panel highlight is the indicator
     if (!layer || layer.type === 'fill') return
+    if (layer.type === 'rays' && layer.fullscreen) return
 
     const go = this.gameObjects.get(this.selectedId)
     if (!go) return
@@ -154,7 +156,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       this._dispatchApply(layer)
       const go = this.gameObjects.get(layer.id)
       if (go) go.setDepth(i * 1000)
-      if (layer.type !== 'fill') this._applyGlow(layer.id, layer.modifiers)
+      if (layer.type !== 'fill' && layer.type !== 'rays') this._applyGlow(layer.id, layer.modifiers)
 
       const baseGo = this.gameObjects.get(layer.id)
       // Images (icon/fill) use displayWidth/displayHeight because setDisplaySize
@@ -222,7 +224,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       this.gameObjects.delete(id)
     }
     this._glowFilters.delete(id)
-    for (const prefix of [FILL_TEXTURE_PREFIX, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, BARCODE_TEXTURE_PREFIX]) {
+    for (const prefix of [FILL_TEXTURE_PREFIX, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, BARCODE_TEXTURE_PREFIX, RAYS_TEXTURE_PREFIX]) {
       const key = `${prefix}${id}`
       if (this.textures.exists(key)) this.textures.remove(key)
     }
@@ -316,6 +318,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     else if (layer.type === 'image') applyImage(this, layer)
     else if (layer.type === 'video') applyVideo(this, layer)
     else if (layer.type === 'barcode') applyBarcode(this, layer)
+    else if (layer.type === 'rays') applyRays(this, layer)
   }
 
   private _selectById(id: string | null): void {

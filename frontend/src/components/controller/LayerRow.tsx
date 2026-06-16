@@ -7,6 +7,7 @@ import {
   IconChevronsDown,
   IconChevronsUp,
   IconCircle,
+  IconGridDots,
   IconLetterT,
   IconMovie,
   IconPhoto,
@@ -102,6 +103,7 @@ function LayerIcon({ layer }: { layer: Layer }) {
   if (layer.type === 'image') return <IconPhoto size={11} className="shrink-0" />
   if (layer.type === 'video') return <IconMovie size={11} className="shrink-0" />
   if (layer.type === 'barcode') return <IconBarcode size={11} className="shrink-0" />
+  if (layer.type === 'rays') return <IconGridDots size={11} className="shrink-0" />
   if (layer.shape === 'circle') return <IconCircle size={11} className="shrink-0" />
   return <IconSquare size={11} className="shrink-0" />
 }
@@ -114,6 +116,7 @@ export function layerLabel(layer: Layer): string {
   if (layer.type === 'image') return layer.url ? 'Image' : 'Image (empty)'
   if (layer.type === 'video') return layer.url ? 'Video' : 'Video (empty)'
   if (layer.type === 'barcode') return layer.code ? `Barcode ${layer.code}` : 'Barcode'
+  if (layer.type === 'rays') return layer.fullscreen ? 'Rays (fullscreen)' : `Rays ${layer.columns}×${layer.rows}`
   return (layer as Layer).type
 }
 
