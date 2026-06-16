@@ -82,6 +82,12 @@ export const PhaserCanvas = forwardRef<PhaserCanvasHandle, Props>(
           width: CANVAS_W,
           height: CANVAS_H,
         },
+        // Only listen for input on the canvas itself, never on the window.
+        // With window events on, Phaser hit-tests the canvas for any pointer
+        // event that bubbles to the window — so a click on a modal/popover
+        // stacked above the canvas would still select/switch the layer behind
+        // it. Disabling them makes normal DOM stacking block those clicks.
+        input: { windowEvents: false },
         audio: { noAudio: true },
       })
 
