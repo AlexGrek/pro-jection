@@ -14,6 +14,7 @@ interface Props {
   onPositionChange?: (id: string, x: number, y: number) => void
   onDragMove?: (id: string, x: number, y: number) => void
   onObjectSelect?: (id: string) => void
+  onWheelResize?: (id: string, factor: number) => void
   className?: string
 }
 
@@ -21,17 +22,19 @@ export const CANVAS_W = 1920
 export const CANVAS_H = 1080
 
 export const PhaserCanvas = forwardRef<PhaserCanvasHandle, Props>(
-  ({ editable = false, onPositionChange, onDragMove, onObjectSelect, className }, ref) => {
+  ({ editable = false, onPositionChange, onDragMove, onObjectSelect, onWheelResize, className }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null)
     const sceneRef = useRef<ProjectionScene | null>(null)
     const pendingRef = useRef<Scene | null>(null)
     const cbPositionRef = useRef(onPositionChange)
     const cbDragMoveRef = useRef(onDragMove)
     const cbSelectRef = useRef(onObjectSelect)
+    const cbWheelRef = useRef(onWheelResize)
 
     useEffect(() => { cbPositionRef.current = onPositionChange }, [onPositionChange])
     useEffect(() => { cbDragMoveRef.current = onDragMove }, [onDragMove])
     useEffect(() => { cbSelectRef.current = onObjectSelect }, [onObjectSelect])
+    useEffect(() => { cbWheelRef.current = onWheelResize }, [onWheelResize])
 
     const applyScene = useCallback((scene: Scene) => {
       if (sceneRef.current) {
@@ -59,6 +62,7 @@ export const PhaserCanvas = forwardRef<PhaserCanvasHandle, Props>(
       scene.onPositionChange = (id, x, y) => cbPositionRef.current?.(id, x, y)
       scene.onDragMove = (id, x, y) => cbDragMoveRef.current?.(id, x, y)
       scene.onObjectSelect = (id) => cbSelectRef.current?.(id)
+      scene.onWheelResize = (id, factor) => cbWheelRef.current?.(id, factor)
       scene.onSceneReady = (s) => {
         sceneRef.current = s
         if (pendingRef.current) {

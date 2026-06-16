@@ -68,6 +68,27 @@ type ServerEvent =
 
 const TEXT_DEBOUNCE_MS = 350
 
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+
+/** Scale a layer's size by `factor` for mouse-wheel resize. Fill/icon are left untouched. */
+function resizeLayer(layer: Layer, factor: number): Layer {
+  switch (layer.type) {
+    case 'text':
+      return { ...layer, font_size: clamp(layer.font_size * factor, 8, 800) }
+    case 'shape':
+      return {
+        ...layer,
+        width: clamp(layer.width * factor, 0.01, 3),
+        height: clamp(layer.height * factor, 0.01, 3),
+      }
+    case 'image':
+    case 'video':
+      return { ...layer, width: clamp(layer.width * factor, 0.02, 3) }
+    default:
+      return layer
+  }
+}
+
 type MobileTab = 'layers' | 'properties' | 'modifiers' | 'animations' | 'add'
 
 const MOBILE_TABS: { id: MobileTab; label: string; Icon: React.ComponentType<{ size?: number; stroke?: number; className?: string }> }[] = [
@@ -243,6 +264,13 @@ export function ControllerPage() {
     setSelectedId(id)
     if (isMobile) setActiveTab('properties')
   }, [isMobile])
+
+  // Mouse-wheel resize streams a debounced send while scrolling (like text/colour tuning).
+  const onWheelResize = useCallback((id: string, factor: number) => {
+    const next = objectsRef.current.map((o) => (o.id === id ? resizeLayer(o, factor) : o))
+    applyObjects(next)
+    sendDebounced(next)
+  }, [applyObjects, sendDebounced])
 
   // ── Grid overlay ──────────────────────────────────────────────────────────
   const changeGrid = useCallback((next: GridSettings | null) => {
@@ -691,6 +719,7 @@ export function ControllerPage() {
             onPositionChange={onPositionChange}
             onDragMove={onDragMove}
             onObjectSelect={onObjectSelect}
+            onWheelResize={onWheelResize}
             className="w-full h-full"
           />
         </div>

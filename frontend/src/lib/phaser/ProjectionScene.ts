@@ -30,6 +30,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   onPositionChange?: (id: string, x: number, y: number) => void
   onDragMove?: (id: string, x: number, y: number) => void
   onObjectSelect?: (id: string) => void
+  onWheelResize?: (id: string, factor: number) => void
   onSceneReady?: (scene: ProjectionScene) => void
 
   readonly gameObjects = new Map<string, LayerObject>()
@@ -59,6 +60,20 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
         .setOrigin(0.5)
 
       this._selectionGraphics = this.add.graphics().setDepth(Number.MAX_SAFE_INTEGER)
+
+      // Mouse-wheel resize: scale the selected layer (or the one under the
+      // pointer when nothing is selected). The controller applies the per-type
+      // size change; the scene only reports intent.
+      this.input.on(
+        'wheel',
+        (_p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[], _dx: number, dy: number) => {
+          if (dy === 0) return
+          const id = this.selectedId ?? (over.length > 0 ? this._idForGameObject(over[0]) : undefined)
+          if (!id) return
+          const factor = dy < 0 ? 1.08 : 1 / 1.08
+          this.onWheelResize?.(id, factor)
+        },
+      )
     }
     this.onSceneReady?.(this)
   }
@@ -302,6 +317,14 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
 
   private _selectById(id: string | null): void {
     this.selectedId = id
+  }
+
+  /** Reverse-lookup a layer id from its GameObject (clones are non-interactive, so never matched here). */
+  private _idForGameObject(go: Phaser.GameObjects.GameObject): string | undefined {
+    for (const [id, obj] of this.gameObjects) {
+      if (obj === go) return id
+    }
+    return undefined
   }
 
   /** Draw (or hide) the scene-wide grid overlay above every layer. */

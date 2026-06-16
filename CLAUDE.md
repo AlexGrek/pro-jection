@@ -26,8 +26,8 @@ Sessions (controller ↔ projector pairs) live in server RAM only and are never 
   - `POST /api/sessions/{code}/history/undo` — step cursor back, broadcast ([history.rs](backend/src/routes/history.rs))
   - `POST /api/sessions/{code}/history/redo` — step cursor forward, broadcast ([history.rs](backend/src/routes/history.rs))
   - `GET /api/scenes` · `POST /api/scenes` — list / create persisted scenes; `GET|PUT|DELETE /api/scenes/{id}` — load / re-save / delete ([scenes.rs](backend/src/routes/scenes.rs)). 14-day TTL, reference-counted artifacts. See [scenes.md](scenes.md)
-  - `POST /api/useruploads` — multipart image upload (png/jpg/webp/svg, 20 MB max), stores via OpenDAL, returns URL ([assets.rs](backend/src/routes/assets.rs))
-  - `GET /api/useruploads/{key}` — serve uploaded image from OpenDAL ([assets.rs](backend/src/routes/assets.rs))
+  - `POST /api/useruploads` — multipart image/video upload (png/jpg/webp/svg + mp4/webm/ogv/mov, 200 MB max), stores via OpenDAL, returns URL ([assets.rs](backend/src/routes/assets.rs))
+  - `GET /api/useruploads/{key}` — serve uploaded image/video from OpenDAL with the matching content-type ([assets.rs](backend/src/routes/assets.rs))
   - `/assets/*` → ServeDir (no fallback, so a missing hashed chunk 404s cleanly)
   - everything else → SPA fallback to `index.html`
 - Env vars (with defaults): `HOST=0.0.0.0`, `PORT=8080`, `STORAGE_CONFIG=config/storage.yaml`, `STATIC_DIR=../frontend/dist`, `CORS_ALLOWED_ORIGINS=` (comma-separated).
@@ -78,7 +78,8 @@ Type-specific UI lives under [components/controller/](frontend/src/components/co
 
 - [TextProperties.tsx](frontend/src/components/controller/TextProperties.tsx) · [ShapeProperties.tsx](frontend/src/components/controller/ShapeProperties.tsx) · [FillProperties.tsx](frontend/src/components/controller/FillProperties.tsx) · [IconProperties.tsx](frontend/src/components/controller/IconProperties.tsx) · [ImageProperties.tsx](frontend/src/components/controller/ImageProperties.tsx)
 - [LayerRow.tsx](frontend/src/components/controller/LayerRow.tsx) — single row in the Layers panel with reorder buttons (front/forward/backward/back).
-- [AddObjectPanel.tsx](frontend/src/components/controller/AddObjectPanel.tsx) — Text / Rectangle / Circle / Background / Icon / Image buttons.
+- [AddObjectPanel.tsx](frontend/src/components/controller/AddObjectPanel.tsx) — Text / Rectangle / Circle / Background / Icon / Image / Video buttons.
+- [GridControl.tsx](frontend/src/components/controller/GridControl.tsx) — header popover toggling the scene-wide grid overlay and picking its pattern (off / grid / dots / thirds / columns).
 - [PropertyRow.tsx](frontend/src/components/controller/PropertyRow.tsx) — shared label/content row layout.
 
 Send timing per input kind:
@@ -104,15 +105,17 @@ lib/scene/
 ├── shape.ts    # ShapeLayer (rectangle | circle, filled or outlined) + DEFAULT_RECT_LAYER + DEFAULT_CIRCLE_LAYER
 ├── fill.ts     # FillLayer (solid | linear gradient with rgba stops) + DEFAULT_FILL_LAYER
 ├── icon.ts     # IconLayer + DEFAULT_ICON_LAYER
-└── image.ts    # ImageLayer (url + width; height from aspect ratio) + DEFAULT_IMAGE_LAYER
+├── image.ts    # ImageLayer (url + width; height from aspect ratio) + DEFAULT_IMAGE_LAYER
+├── video.ts    # VideoLayer (url + width + loop + muted; height from aspect ratio) + DEFAULT_VIDEO_LAYER
+└── grid.ts     # GridSettings (scene-wide overlay, not a layer) + GRID_TYPES + DEFAULT_GRID
 ```
 
-`BaseLayer` carries `id`, `x` and `y` (0–1), `opacity` (0–1), `animations: {}`, and `modifiers: []`. `Layer` is the discriminated union of `TextLayer | ShapeLayer | FillLayer | IconLayer | ImageLayer`. Adding a new layer type means: add a file under `lib/scene/`, extend the `Layer` union in `index.ts`, add a renderer under `lib/phaser/renderers/`, and add a Properties component under `components/controller/`. See [images.md](images.md) for a worked example.
+`BaseLayer` carries `id`, `x` and `y` (0–1), `opacity` (0–1), `animations: {}`, and `modifiers: []`. `Layer` is the discriminated union of `TextLayer | ShapeLayer | FillLayer | IconLayer | ImageLayer | VideoLayer`. Adding a new layer type means: add a file under `lib/scene/`, extend the `Layer` union in `index.ts`, add a renderer under `lib/phaser/renderers/`, and add a Properties component under `components/controller/`. See [images.md](images.md) for a worked example. `Scene` also carries an optional `grid?: GridSettings` — a scene-wide overlay, not a layer; it rides along on every send/apply and is drawn by `ProjectionScene` above all layers.
 
 ## Phaser integration
 
 - Scene: [ProjectionScene.ts](frontend/src/lib/phaser/ProjectionScene.ts) — 1920×1080 canvas. Owns the `gameObjects: Map<id, LayerObject>` and `layerData: Map<id, Layer>` maps and dispatches `applyScene` to per-type renderers under [lib/phaser/renderers/](frontend/src/lib/phaser/renderers/). Implements [`RenderCtx`](frontend/src/lib/phaser/renderers/types.ts) so renderers operate via its public surface (`add`, `textures`, `gameObjects`, `layerData`, `selectedId`, `editable`, `attachInteractive`, `destroyGameObject`).
-- Renderers: [text.ts](frontend/src/lib/phaser/renderers/text.ts) creates `Phaser.GameObjects.Text`; [shape.ts](frontend/src/lib/phaser/renderers/shape.ts) creates `Rectangle` or `Ellipse` and resolves the filled / outlined / selected style permutation; [fill.ts](frontend/src/lib/phaser/renderers/fill.ts) paints into a `CanvasTexture` (HTML5 `createLinearGradient` for true rgba multi-stop gradients) and displays it as an `Image` at canvas center. Each renderer exports `apply…` and (for text/shape) `refreshSelection`.
+- Renderers: [text.ts](frontend/src/lib/phaser/renderers/text.ts) creates `Phaser.GameObjects.Text`; [shape.ts](frontend/src/lib/phaser/renderers/shape.ts) creates `Rectangle` or `Ellipse` and resolves the filled / outlined / selected style permutation; [fill.ts](frontend/src/lib/phaser/renderers/fill.ts) paints into a `CanvasTexture` (HTML5 `createLinearGradient` for true rgba multi-stop gradients) and displays it as an `Image` at canvas center; [image.ts](frontend/src/lib/phaser/renderers/image.ts) / [video.ts](frontend/src/lib/phaser/renderers/video.ts) load uploaded media (a placeholder rectangle until the source resolves, then sized from the natural aspect ratio). Each renderer exports `apply…` and (for text/shape) `refreshSelection`. The grid overlay is drawn directly by `ProjectionScene._applyGrid` via [grid.ts](frontend/src/lib/phaser/renderers/grid.ts)'s pure `drawGrid`, not the per-layer dispatch.
 - `attachInteractive(go, id, opts)` is unified for all draggable / clickable layers. Text passes `{ margin: 80 }`; shapes default `margin: 0`; fills pass `{ draggable: false }` (selectable but not movable). Drag-end updates `layerData` and fires `onPositionChange`. Pointer-down fires `onObjectSelect`.
 - Selection style: text uses `setStroke('#3b82f6', 4)`; shapes overlay a blue stroke via `setStrokeStyle` (and restore the configured stroke on deselect); fills have no visual selection mark — the panel highlight is the indicator. Constants in [constants.ts](frontend/src/lib/phaser/constants.ts).
 - Z-order: `applyScene` calls `setDepth(i)` for each layer in array order, so reordering the array reorders the visual stack.
@@ -154,6 +157,6 @@ Summary: `GET /api/sessions/{code}/history` returns the full stack and cursor; `
 - React Router stays in **library mode** (`react-router-dom` `BrowserRouter`). Don't migrate to the framework/data-router setup.
 - The projector page auto-reconnects; the controller page does not (manual reconnect button only, to surface the "already connected" error clearly).
 - Phaser game instances are owned by `PhaserCanvas` and destroyed on unmount. Never call `game.destroy()` from outside the component. Communicate with the scene exclusively through `PhaserCanvasHandle` (`applyScene`, `selectObject`, `getScene`).
-- Don't add Phaser audio, physics, or asset loaders. Visual layers are confined to text / shape / fill — extend by adding a new file under [lib/scene/](frontend/src/lib/scene/) plus a matching renderer in [lib/phaser/renderers/](frontend/src/lib/phaser/renderers/), not by reaching into the existing renderers.
+- Don't add Phaser audio or physics. Layer kinds are text / shape / fill / icon / image / video — extend by adding a new file under [lib/scene/](frontend/src/lib/scene/) plus a matching renderer in [lib/phaser/renderers/](frontend/src/lib/phaser/renderers/), not by reaching into the existing renderers. Video uses `Video.loadURL` (no preload loader), plays muted+looping by default, and reveals itself on the `created` event once its aspect ratio is known.
 - Auto-send is the contract: never reintroduce a Send button. Mutations always go `patch → applyObjects → sendNow/sendDebounced/sendCurrent`. Sliders preview on `onChange` and commit on release/blur — don't send during continuous input. The colour picker is the exception: it **streams debounced sends while tuning** (`onChange → sendDebounced`) and flushes an immediate `sendNow` on commit. Because its `onCommit(hex)` carries the final hex, callers send the freshly-`patch`ed array directly (`sendNow(patch({ color: hex }))`) rather than `sendCurrent` — `objectsRef` lags a render, so a synchronous swatch/system commit via `sendCurrent` would send the previous colour.
 - The Vite proxy must cover `/api` as well as `/ws` and `/health` paths.
