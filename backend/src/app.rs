@@ -47,7 +47,14 @@ pub fn create_app(state: Arc<AppState>) -> Router {
         .route("/api/sessions/{code}/history", get(routes::history::get_history))
         .route("/api/sessions/{code}/history/undo", post(routes::history::undo))
         .route("/api/sessions/{code}/history/redo", post(routes::history::redo))
-        .route("/api/useruploads", post(routes::assets::upload).layer(DefaultBodyLimit::max(20 * 1024 * 1024)))
+        .route("/api/scenes", get(routes::scenes::list).post(routes::scenes::create))
+        .route(
+            "/api/scenes/{id}",
+            get(routes::scenes::get)
+                .put(routes::scenes::update)
+                .delete(routes::scenes::remove),
+        )
+        .route("/api/useruploads", post(routes::assets::upload).layer(DefaultBodyLimit::max(200 * 1024 * 1024)))
         .route("/api/useruploads/{key}", get(routes::assets::serve))
         .nest_service("/assets", ServeDir::new(&assets_dir))
         .fallback_service(spa_fallback)

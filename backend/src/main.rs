@@ -9,7 +9,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use log::info;
-use opendal::Operator;
 use tokio::net::TcpListener;
 
 use crate::state::AppState;
@@ -56,14 +55,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // GC: delete uploads older than 24 hours, runs every 3 hours.
+    // GC: expire scenes past their 14-day TTL, then sweep unreferenced uploads. Every 3 hours.
     let storage_gc = state.storage.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(3 * 60 * 60));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             interval.tick().await;
-            run_upload_gc(&storage_gc).await;
+            routes::scenes::run_gc(&storage_gc).await;
         }
     });
 
@@ -74,54 +73,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Listening on http://{}", bind);
     axum::serve(listener, app).await?;
     Ok(())
-}
-
-async fn run_upload_gc(storage: &Operator) {
-    let cutoff = opendal::raw::Timestamp::now() - Duration::from_secs(24 * 60 * 60);
-
-    let entries = match storage.list("uploads/").await {
-        Ok(e) => e,
-        Err(e) => {
-            log::warn!("upload GC: list failed: {e}");
-            return;
-        }
-    };
-
-    let mut deleted = 0u32;
-    let mut errors = 0u32;
-
-    for entry in &entries {
-        if entry.path().ends_with('/') {
-            continue;
-        }
-
-        let meta = match storage.stat(entry.path()).await {
-            Ok(m) => m,
-            Err(e) => {
-                log::warn!("upload GC: stat {} failed: {e}", entry.path());
-                errors += 1;
-                continue;
-            }
-        };
-
-        let Some(last_modified) = meta.last_modified() else {
-            continue;
-        };
-
-        if last_modified >= cutoff {
-            continue;
-        }
-
-        match storage.delete(entry.path()).await {
-            Ok(()) => deleted += 1,
-            Err(e) => {
-                log::warn!("upload GC: delete {} failed: {e}", entry.path());
-                errors += 1;
-            }
-        }
-    }
-
-    if deleted > 0 || errors > 0 {
-        log::info!("Upload GC: deleted={deleted} errors={errors}");
-    }
 }

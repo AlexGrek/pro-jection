@@ -6,6 +6,7 @@ export type LayerObject =
   | Phaser.GameObjects.Rectangle
   | Phaser.GameObjects.Ellipse
   | Phaser.GameObjects.Image
+  | Phaser.GameObjects.Video
 
 export interface InteractiveOpts {
   /** Default true. When false, the object is selectable on click but not draggable. */

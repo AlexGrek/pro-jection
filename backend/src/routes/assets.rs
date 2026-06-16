@@ -36,7 +36,10 @@ pub async fn upload(
             .unwrap_or("bin")
             .to_lowercase();
 
-        if !matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp" | "svg") {
+        if !matches!(
+            ext.as_str(),
+            "png" | "jpg" | "jpeg" | "webp" | "svg" | "mp4" | "webm" | "ogv" | "mov"
+        ) {
             return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE);
         }
 
@@ -77,6 +80,10 @@ pub async fn serve(
                 "jpg" | "jpeg" => "image/jpeg",
                 "webp" => "image/webp",
                 "svg" => "image/svg+xml",
+                "mp4" => "video/mp4",
+                "webm" => "video/webm",
+                "ogv" => "video/ogg",
+                "mov" => "video/quicktime",
                 _ => "application/octet-stream",
             };
             let mut headers = HeaderMap::new();

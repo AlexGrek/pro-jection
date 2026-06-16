@@ -11,6 +11,8 @@ import type { ShapeLayer } from './shape'
 import type { FillLayer } from './fill'
 import type { IconLayer } from './icon'
 import type { ImageLayer } from './image'
+import type { VideoLayer } from './video'
+import type { GridSettings } from './grid'
 
 export * from './base'
 export * from './fonts'
@@ -19,13 +21,17 @@ export * from './shape'
 export * from './fill'
 export * from './icon'
 export * from './image'
+export * from './video'
+export * from './grid'
 
 /** Union of all known layer types. Grows as new types are added. */
-export type Layer = TextLayer | ShapeLayer | FillLayer | IconLayer | ImageLayer
+export type Layer = TextLayer | ShapeLayer | FillLayer | IconLayer | ImageLayer | VideoLayer
 
-/** A full slide: an ordered list of layers. */
+/** A full slide: an ordered list of layers plus an optional scene-wide grid overlay. */
 export interface Scene {
   objects: Layer[]
+  /** Grid overlay drawn on top of every layer. Absent = off. */
+  grid?: GridSettings
 }
 
 export const EMPTY_SCENE: Scene = { objects: [] }

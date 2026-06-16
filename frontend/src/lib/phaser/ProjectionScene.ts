@@ -1,14 +1,16 @@
 import Phaser from 'phaser'
-import type { GlowModifier, Layer, Modifier, Scene } from '@/lib/scene'
+import type { GlowModifier, GridSettings, Layer, Modifier, Scene } from '@/lib/scene'
 import { getArrayModifier, getGlowModifier, getMatrixModifier } from '@/lib/scene'
 import { GLOW_PERIOD_MAX, GLOW_PERIOD_MIN } from '@/lib/scene'
 import { hexToInt } from './colors'
-import { CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX } from './constants'
+import { CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, GRID_DEPTH, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX } from './constants'
 import { applyText } from './renderers/text'
 import { applyShape } from './renderers/shape'
 import { applyFill } from './renderers/fill'
 import { applyIcon } from './renderers/icon'
 import { applyImage, cleanupImage } from './renderers/image'
+import { applyVideo, cleanupVideo } from './renderers/video'
+import { drawGrid } from './renderers/grid'
 import type { InteractiveOpts, LayerObject, RenderCtx } from './renderers/types'
 
 export { type Layer, type Scene } from '@/lib/scene'
@@ -38,6 +40,8 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
 
   private hint?: Phaser.GameObjects.Text
   private _selectionGraphics?: Phaser.GameObjects.Graphics
+  private _grid?: Phaser.GameObjects.Graphics
+  private _gridSettings?: GridSettings
 
   constructor() {
     super({ key: 'ProjectionScene' })
@@ -178,6 +182,8 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       }
     })
 
+    this._applyGrid(scene.grid)
+
     if (this.hint) {
       this.hint.setVisible(scene.objects.length === 0)
     }
@@ -188,7 +194,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   }
 
   getScene(): Scene {
-    return { objects: Array.from(this.layerData.values()) }
+    return { objects: Array.from(this.layerData.values()), grid: this._gridSettings }
   }
 
   // ── Internals exposed for renderer modules (RenderCtx surface) ────────────
@@ -205,6 +211,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       if (this.textures.exists(key)) this.textures.remove(key)
     }
     cleanupImage(id)
+    cleanupVideo(id)
   }
 
   attachInteractive(go: LayerObject, id: string, opts: InteractiveOpts = {}): void {
@@ -290,10 +297,25 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     else if (layer.type === 'fill') applyFill(this, layer)
     else if (layer.type === 'icon') applyIcon(this, layer)
     else if (layer.type === 'image') applyImage(this, layer)
+    else if (layer.type === 'video') applyVideo(this, layer)
   }
 
   private _selectById(id: string | null): void {
     this.selectedId = id
+  }
+
+  /** Draw (or hide) the scene-wide grid overlay above every layer. */
+  private _applyGrid(grid?: GridSettings): void {
+    this._gridSettings = grid
+    if (!grid) {
+      this._grid?.setVisible(false)
+      return
+    }
+    if (!this._grid) {
+      this._grid = this.add.graphics().setDepth(GRID_DEPTH)
+    }
+    this._grid.setVisible(true)
+    drawGrid(this._grid, grid.type)
   }
 
   /**

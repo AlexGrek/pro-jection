@@ -3,16 +3,17 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   IconArrowLeft,
   IconCirclePlus,
+  IconCopy,
+  IconDeviceFloppy,
   IconDeviceGamepad2,
-  IconDownload,
   IconExternalLink,
+  IconFolderOpen,
   IconKeyboard,
   IconPlayerPlay,
   IconRefresh,
   IconAdjustmentsHorizontal,
   IconSparkles,
   IconStack2,
-  IconUpload,
 } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { PhaserCanvas, type PhaserCanvasHandle } from '@/components/PhaserCanvas'
@@ -23,6 +24,7 @@ import { GlowAnimationPanel } from '@/components/controller/GlowAnimationPanel'
 import { GlowModifierPanel } from '@/components/controller/GlowModifierPanel'
 import { MatrixModifierPanel } from '@/components/controller/MatrixModifierPanel'
 import { FillProperties } from '@/components/controller/FillProperties'
+import { GridControl } from '@/components/controller/GridControl'
 import { IconProperties } from '@/components/controller/IconProperties'
 import { ImageProperties } from '@/components/controller/ImageProperties'
 import { HotkeysMenu } from '@/components/controller/HotkeysMenu'
@@ -30,6 +32,12 @@ import { LayerRow } from '@/components/controller/LayerRow'
 import { PropertyRow } from '@/components/controller/PropertyRow'
 import { ShapeProperties } from '@/components/controller/ShapeProperties'
 import { TextProperties } from '@/components/controller/TextProperties'
+import { VideoProperties } from '@/components/controller/VideoProperties'
+import {
+  OpenSceneDialog,
+  SaveSceneDialog,
+  type SavedSceneMeta,
+} from '@/components/controller/SceneStorageDialogs'
 import type { PropertyControls } from '@/components/controller/types'
 import {
   DEFAULT_CIRCLE_LAYER,
@@ -38,13 +46,16 @@ import {
   DEFAULT_IMAGE_LAYER,
   DEFAULT_RECT_LAYER,
   DEFAULT_TEXT_LAYER,
+  DEFAULT_VIDEO_LAYER,
   type FillLayer,
   type IconLayer,
   type ImageLayer,
+  type GridSettings,
   type Layer,
   type Scene,
   type ShapeLayer,
   type TextLayer,
+  type VideoLayer,
 } from '@/lib/scene'
 
 type ConnState = 'connecting' | 'connected' | 'disconnected' | 'error'
@@ -120,6 +131,7 @@ export function ControllerPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const [objects, setObjects] = useState<Layer[]>([])
+  const [grid, setGrid] = useState<GridSettings | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [justAddedTextId, setJustAddedTextId] = useState<string | null>(null)
   const [hotkeysOpen, setHotkeysOpen] = useState(false)
@@ -127,9 +139,10 @@ export function ControllerPage() {
   const wsRef = useRef<WebSocket | null>(null)
   const canvasRef = useRef<PhaserCanvasHandle>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const objectsRef = useRef<Layer[]>(objects)
   useEffect(() => { objectsRef.current = objects }, [objects])
+  const gridRef = useRef<GridSettings | null>(grid)
+  useEffect(() => { gridRef.current = grid }, [grid])
   const selectedIdRef = useRef<string | null>(null)
   useEffect(() => { selectedIdRef.current = selectedId }, [selectedId])
 
@@ -152,9 +165,11 @@ export function ControllerPage() {
   const resizeAddW    = useCallback((d: number) => setAddW(w    => Math.max(120, Math.min(400, w - d))), [])
 
   // ── Local sync: state + canvas ────────────────────────────────────────────
+  // The grid overlay is scene-wide, not a layer — it rides along on every apply
+  // and send via gridRef so the objects-centric helpers stay unchanged.
   const applyObjects = useCallback((next: Layer[]) => {
     setObjects(next)
-    canvasRef.current?.applyScene({ objects: next })
+    canvasRef.current?.applyScene({ objects: next, grid: gridRef.current ?? undefined })
   }, [])
 
   // ── Send ──────────────────────────────────────────────────────────────────
@@ -164,7 +179,7 @@ export function ControllerPage() {
       clearTimeout(debounceRef.current)
       debounceRef.current = null
     }
-    wsRef.current.send(JSON.stringify({ objects: next } satisfies Scene))
+    wsRef.current.send(JSON.stringify({ objects: next, grid: gridRef.current ?? undefined } satisfies Scene))
   }, [])
 
   const sendDebounced = useCallback((next: Layer[]) => {
@@ -197,7 +212,10 @@ export function ControllerPage() {
           setConnState('error')
         }
       } else {
-        applyObjects((data as Scene).objects)
+        const scene = data as Scene
+        gridRef.current = scene.grid ?? null
+        setGrid(scene.grid ?? null)
+        applyObjects(scene.objects)
       }
     }
 
@@ -225,6 +243,14 @@ export function ControllerPage() {
     setSelectedId(id)
     if (isMobile) setActiveTab('properties')
   }, [isMobile])
+
+  // ── Grid overlay ──────────────────────────────────────────────────────────
+  const changeGrid = useCallback((next: GridSettings | null) => {
+    gridRef.current = next
+    setGrid(next)
+    canvasRef.current?.applyScene({ objects: objectsRef.current, grid: next ?? undefined })
+    sendNow(objectsRef.current)
+  }, [sendNow])
 
   // ── Layer mutation ────────────────────────────────────────────────────────
   const patchSelected = useCallback((patch: Record<string, unknown>): Layer[] => {
@@ -322,6 +348,7 @@ export function ControllerPage() {
   const addCircle    = () => addLayerAtEnd({ ...DEFAULT_CIRCLE_LAYER, id: crypto.randomUUID() } as ShapeLayer)
   const addIcon      = () => addLayerAtEnd({ ...DEFAULT_ICON_LAYER,   id: crypto.randomUUID() } as IconLayer)
   const addImage     = () => addLayerAtEnd({ ...DEFAULT_IMAGE_LAYER,  id: crypto.randomUUID() } as ImageLayer)
+  const addVideo     = () => addLayerAtEnd({ ...DEFAULT_VIDEO_LAYER,  id: crypto.randomUUID() } as VideoLayer)
 
   const addFill = () => {
     const newLayer: FillLayer = {
@@ -337,34 +364,76 @@ export function ControllerPage() {
     if (isMobile) setActiveTab('properties')
   }
 
-  // ── Save / Load ───────────────────────────────────────────────────────────
-  const saveScene = useCallback(() => {
-    const scene: Scene = { objects: objectsRef.current }
-    const blob = new Blob([JSON.stringify(scene, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `scene-${code}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [code])
+  // ── Server save / open ────────────────────────────────────────────────────
+  const [currentSceneId, setCurrentSceneId] = useState<string | null>(null)
+  const [currentSceneName, setCurrentSceneName] = useState('')
+  const [openDialogOpen, setOpenDialogOpen] = useState(false)
+  const [saveDialog, setSaveDialog] = useState<{ open: boolean; title: string; name: string }>(
+    { open: false, title: 'Save Scene', name: '' },
+  )
 
-  const loadScene = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      try {
-        const scene: Scene = JSON.parse(ev.target?.result as string)
-        if (!Array.isArray(scene.objects)) throw new Error('invalid scene')
-        applyObjects(scene.objects)
-        sendNow(scene.objects)
-      } catch {
-        // silently ignore malformed files
-      }
+  // Upload keys referenced by the current scene's image and video layers (deduped).
+  const collectArtifacts = (objs: Layer[]): string[] => {
+    const keys = objs
+      .filter((o): o is ImageLayer | VideoLayer => (o.type === 'image' || o.type === 'video') && !!o.url)
+      .map((o) => o.url.replace('/api/useruploads/', ''))
+    return [...new Set(keys)]
+  }
+
+  // POST a new saved scene (first save of a new scene, or "Save As").
+  const createScene = useCallback(async (name: string) => {
+    const objs = objectsRef.current
+    const resp = await fetch('/api/scenes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, scene: { objects: objs, grid: gridRef.current ?? undefined }, artifacts: collectArtifacts(objs) }),
+    })
+    if (!resp.ok) return
+    const meta = (await resp.json()) as SavedSceneMeta
+    setCurrentSceneId(meta.id)
+    setCurrentSceneName(meta.name)
+  }, [])
+
+  // Save button: re-save in place if this scene already exists, else prompt for a name.
+  const serverSave = async () => {
+    if (!currentSceneId) {
+      setSaveDialog({ open: true, title: 'Save Scene', name: currentSceneName || `Scene ${code}` })
+      return
     }
-    reader.readAsText(file)
-    e.target.value = ''
+    const objs = objectsRef.current
+    const resp = await fetch(`/api/scenes/${currentSceneId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: currentSceneName, scene: { objects: objs, grid: gridRef.current ?? undefined }, artifacts: collectArtifacts(objs) }),
+    })
+    if (resp.status === 404) {
+      // Scene expired or was deleted server-side — fall back to creating a fresh one.
+      setCurrentSceneId(null)
+      setSaveDialog({ open: true, title: 'Save Scene', name: currentSceneName || `Scene ${code}` })
+    }
+  }
+
+  const serverSaveAs = () => {
+    setSaveDialog({
+      open: true,
+      title: 'Save Scene As',
+      name: currentSceneName ? `${currentSceneName} copy` : `Scene ${code}`,
+    })
+  }
+
+  const openSavedScene = useCallback(async (meta: SavedSceneMeta) => {
+    const resp = await fetch(`/api/scenes/${meta.id}`)
+    if (!resp.ok) return
+    const data = (await resp.json()) as { id: string; name: string; scene: Scene }
+    const objs = data.scene.objects ?? []
+    gridRef.current = data.scene.grid ?? null
+    setGrid(data.scene.grid ?? null)
+    applyObjects(objs)
+    sendNow(objs)
+    setSelectedId(null)
+    canvasRef.current?.selectObject(null)
+    setCurrentSceneId(data.id)
+    setCurrentSceneName(data.name)
   }, [applyObjects, sendNow])
 
   const controls = useMemo<PropertyControls>(() => ({
@@ -407,8 +476,9 @@ export function ControllerPage() {
       {selected.type === 'fill'  && <FillProperties  layer={selected} controls={controls} />}
       {selected.type === 'icon'  && <IconProperties  layer={selected} controls={controls} />}
       {selected.type === 'image' && <ImageProperties layer={selected} controls={controls} />}
+      {selected.type === 'video' && <VideoProperties layer={selected} controls={controls} />}
 
-      {selected.type !== 'fill' && selected.type !== 'image' && (
+      {selected.type !== 'fill' && selected.type !== 'image' && selected.type !== 'video' && (
         <PropertyRow label="Color">
           <ColorPicker
             value={selected.color}
@@ -482,14 +552,21 @@ export function ControllerPage() {
     </div>
   )
 
-  const fileInput = (
-    <input
-      ref={fileInputRef}
-      type="file"
-      accept=".json,application/json"
-      className="hidden"
-      onChange={loadScene}
-    />
+  const sceneDialogs = (
+    <>
+      <SaveSceneDialog
+        open={saveDialog.open}
+        onOpenChange={(open) => setSaveDialog((s) => ({ ...s, open }))}
+        title={saveDialog.title}
+        initialName={saveDialog.name}
+        onSubmit={createScene}
+      />
+      <OpenSceneDialog
+        open={openDialogOpen}
+        onOpenChange={setOpenDialogOpen}
+        onOpen={openSavedScene}
+      />
+    </>
   )
 
   const errorBanner = errorMsg && (
@@ -542,26 +619,36 @@ export function ControllerPage() {
             <IconArrowLeft size={16} stroke={1.5} />
           </Button>
           <IconDeviceGamepad2 size={18} stroke={1} className="text-blue-400 shrink-0" />
-          {fileInput}
+          {sceneDialogs}
           <div className="ml-auto flex items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
               className="text-slate-400 hover:text-white hover:bg-slate-800 px-2"
-              title="Load scene"
-              onClick={() => fileInputRef.current?.click()}
+              title="Open scene"
+              onClick={() => setOpenDialogOpen(true)}
             >
-              <IconUpload size={15} stroke={1.5} />
+              <IconFolderOpen size={15} stroke={1.5} />
             </Button>
             <Button
               variant="ghost"
               size="sm"
               className="text-slate-400 hover:text-white hover:bg-slate-800 px-2"
               title="Save scene"
-              onClick={saveScene}
+              onClick={serverSave}
             >
-              <IconDownload size={15} stroke={1.5} />
+              <IconDeviceFloppy size={15} stroke={1.5} />
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-slate-400 hover:text-white hover:bg-slate-800 px-2"
+              title="Save as new scene"
+              onClick={serverSaveAs}
+            >
+              <IconCopy size={15} stroke={1.5} />
+            </Button>
+            <GridControl grid={grid} onChange={changeGrid} disabled={connState !== 'connected'} />
             <Button
               variant="ghost"
               size="sm"
@@ -642,6 +729,7 @@ export function ControllerPage() {
               onAddFill={addFill}
               onAddIcon={addIcon}
               onAddImage={addImage}
+              onAddVideo={addVideo}
             />
           )}
         </div>
@@ -667,26 +755,42 @@ export function ControllerPage() {
         </Button>
         <IconDeviceGamepad2 size={18} stroke={1} className="text-blue-400 shrink-0" />
         <span className="text-white font-light">Controller</span>
+        {currentSceneName && (
+          <span className="text-slate-500 font-light text-sm truncate max-w-55" title={currentSceneName}>
+            · {currentSceneName}
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-2">
-          {fileInput}
+          {sceneDialogs}
           <Button
             variant="ghost"
             size="sm"
             className="text-slate-400 hover:text-white hover:bg-slate-800 gap-1.5 px-2"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => setOpenDialogOpen(true)}
           >
-            <IconUpload size={15} stroke={1.5} />
-            Load
+            <IconFolderOpen size={15} stroke={1.5} />
+            Open
           </Button>
           <Button
             variant="ghost"
             size="sm"
             className="text-slate-400 hover:text-white hover:bg-slate-800 gap-1.5 px-2"
-            onClick={saveScene}
+            onClick={serverSave}
           >
-            <IconDownload size={15} stroke={1.5} />
+            <IconDeviceFloppy size={15} stroke={1.5} />
             Save
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-slate-400 hover:text-white hover:bg-slate-800 gap-1.5 px-2"
+            title="Save as new scene"
+            onClick={serverSaveAs}
+          >
+            <IconCopy size={15} stroke={1.5} />
+            Save As
+          </Button>
+          <GridControl grid={grid} onChange={changeGrid} disabled={connState !== 'connected'} />
           <Button
             variant="ghost"
             size="sm"
@@ -793,6 +897,7 @@ export function ControllerPage() {
               onAddFill={addFill}
               onAddIcon={addIcon}
               onAddImage={addImage}
+              onAddVideo={addVideo}
             />
           </div>
         </div>

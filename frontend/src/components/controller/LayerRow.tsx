@@ -7,6 +7,7 @@ import {
   IconChevronsUp,
   IconCircle,
   IconLetterT,
+  IconMovie,
   IconPhoto,
   IconCopy,
   IconSquare,
@@ -98,6 +99,7 @@ function LayerIcon({ layer }: { layer: Layer }) {
   if (layer.type === 'fill') return <IconBackground size={11} className="shrink-0" />
   if (layer.type === 'icon') return <IconVectorSpline size={11} className="shrink-0" />
   if (layer.type === 'image') return <IconPhoto size={11} className="shrink-0" />
+  if (layer.type === 'video') return <IconMovie size={11} className="shrink-0" />
   if (layer.shape === 'circle') return <IconCircle size={11} className="shrink-0" />
   return <IconSquare size={11} className="shrink-0" />
 }
@@ -108,6 +110,7 @@ export function layerLabel(layer: Layer): string {
   if (layer.type === 'fill') return layer.fill === 'linear' ? 'Gradient' : 'Solid Fill'
   if (layer.type === 'icon') return findIconDef(layer.icon_id)?.def.label ?? 'Icon'
   if (layer.type === 'image') return layer.url ? 'Image' : 'Image (empty)'
+  if (layer.type === 'video') return layer.url ? 'Video' : 'Video (empty)'
   return (layer as Layer).type
 }
 
