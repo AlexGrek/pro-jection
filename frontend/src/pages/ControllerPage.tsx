@@ -70,7 +70,7 @@ const TEXT_DEBOUNCE_MS = 350
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
-/** Scale a layer's size by `factor` for mouse-wheel resize. Fill/icon are left untouched. */
+/** Scale a layer's size by `factor` for mouse-wheel resize. Only fills are left untouched. */
 function resizeLayer(layer: Layer, factor: number): Layer {
   switch (layer.type) {
     case 'text':
@@ -81,6 +81,8 @@ function resizeLayer(layer: Layer, factor: number): Layer {
         width: clamp(layer.width * factor, 0.01, 3),
         height: clamp(layer.height * factor, 0.01, 3),
       }
+    case 'icon':
+      return { ...layer, size: clamp(layer.size * factor, 0.01, 3) }
     case 'image':
     case 'video':
       return { ...layer, width: clamp(layer.width * factor, 0.02, 3) }
@@ -343,6 +345,19 @@ export function ControllerPage() {
           ? (e.shiftKey ? total - 1 : idx + 1)
           : (e.shiftKey ? 0 : idx - 1)
         moveLayer(idx, to)
+      } else if (e.key === 'Tab') {
+        // Cycle selection through the layer stack (Shift+Tab = backward), wrapping.
+        const objs = objectsRef.current
+        if (objs.length === 0) return
+        e.preventDefault()
+        const dir = e.shiftKey ? -1 : 1
+        const cur = objs.findIndex((o) => o.id === sid)
+        const nextIdx = cur === -1
+          ? (dir === 1 ? 0 : objs.length - 1)
+          : (cur + dir + objs.length) % objs.length
+        const id = objs[nextIdx].id
+        setSelectedId(id)
+        canvasRef.current?.selectObject(id)
       } else if (e.key === 'Escape' && sid) {
         setSelectedId(null)
         canvasRef.current?.selectObject(null)

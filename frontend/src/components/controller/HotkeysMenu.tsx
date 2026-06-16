@@ -4,6 +4,8 @@ const isMac = navigator.userAgent.includes('Mac')
 const MOD = isMac ? '⌘' : 'Ctrl+'
 
 const HOTKEYS = [
+  { keys: ['Tab'], description: 'Select next layer' },
+  { keys: ['Shift+Tab'], description: 'Select previous layer' },
   { keys: ['Del', 'Bksp'], description: 'Delete selected layer' },
   { keys: [`${MOD}D`], description: 'Duplicate selected layer' },
   { keys: [']'], description: 'Move layer forward' },

@@ -88,7 +88,7 @@ Send timing per input kind:
 | Text input | `sendDebounced` (350 ms) |
 | Font / Shape / Fill kind / Add layer / Reorder / Drag-end | `sendNow` immediate |
 | Sliders (size, alpha, width, height, stroke, angle, stop alpha) | preview on `onChange`, `sendCurrent` on `onPointerUp` / `onKeyUp` |
-| Mouse-wheel resize (text / shape / image / video) | `sendDebounced` (350 ms) per tick |
+| Mouse-wheel resize (text / shape / icon / image / video) | `sendDebounced` (350 ms) per tick |
 | Color picker ([ColorPicker.tsx](frontend/src/components/controller/ColorPicker.tsx)) | `sendDebounced` (350 ms) while tuning (slider drag / hex typing / system-picker drag) via `onChange(hex)`; `sendNow` on release / swatch click / hex blur / system close / popover dismiss via `onCommit(hex)` |
 
 The layers panel renders in **reverse** array order so top-of-panel = front-of-stack (Photoshop convention). `moveLayer(from, to)` operates on real array indices.
