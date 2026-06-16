@@ -875,6 +875,7 @@ export function ControllerPage() {
               onPositionChange={onPositionChange}
               onDragMove={onDragMove}
               onObjectSelect={onObjectSelect}
+              onWheelResize={onWheelResize}
               className="w-full h-full"
             />
           </div>
