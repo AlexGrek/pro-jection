@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { PhaserCanvas, type PhaserCanvasHandle } from '@/components/PhaserCanvas'
 import { AddObjectPanel } from '@/components/controller/AddObjectPanel'
 import { ArrayModifierPanel } from '@/components/controller/ArrayModifierPanel'
+import { BarcodeProperties } from '@/components/controller/BarcodeProperties'
 import { ColorPicker } from '@/components/controller/ColorPicker'
 import { GlowAnimationPanel } from '@/components/controller/GlowAnimationPanel'
 import { GlowModifierPanel } from '@/components/controller/GlowModifierPanel'
@@ -41,15 +42,18 @@ import {
 import type { PropertyControls } from '@/components/controller/types'
 import {
   DEFAULT_CIRCLE_LAYER,
+  DEFAULT_BARCODE_LAYER,
   DEFAULT_FILL_LAYER,
   DEFAULT_ICON_LAYER,
   DEFAULT_IMAGE_LAYER,
   DEFAULT_RECT_LAYER,
   DEFAULT_TEXT_LAYER,
   DEFAULT_VIDEO_LAYER,
+  randomBarcodeValue,
   type FillLayer,
   type IconLayer,
   type ImageLayer,
+  type BarcodeLayer,
   type GridSettings,
   type Layer,
   type Scene,
@@ -85,6 +89,7 @@ function resizeLayer(layer: Layer, factor: number): Layer {
       return { ...layer, size: clamp(layer.size * factor, 0.01, 3) }
     case 'image':
     case 'video':
+    case 'barcode':
       return { ...layer, width: clamp(layer.width * factor, 0.02, 3) }
     default:
       return layer
@@ -392,6 +397,11 @@ export function ControllerPage() {
   const addIcon      = () => addLayerAtEnd({ ...DEFAULT_ICON_LAYER,   id: crypto.randomUUID() } as IconLayer)
   const addImage     = () => addLayerAtEnd({ ...DEFAULT_IMAGE_LAYER,  id: crypto.randomUUID() } as ImageLayer)
   const addVideo     = () => addLayerAtEnd({ ...DEFAULT_VIDEO_LAYER,  id: crypto.randomUUID() } as VideoLayer)
+  const addBarcode   = () => addLayerAtEnd({
+    ...DEFAULT_BARCODE_LAYER,
+    id: crypto.randomUUID(),
+    code: randomBarcodeValue(DEFAULT_BARCODE_LAYER.format),
+  } as BarcodeLayer)
 
   const addFill = () => {
     const newLayer: FillLayer = {
@@ -520,8 +530,9 @@ export function ControllerPage() {
       {selected.type === 'icon'  && <IconProperties  layer={selected} controls={controls} />}
       {selected.type === 'image' && <ImageProperties layer={selected} controls={controls} />}
       {selected.type === 'video' && <VideoProperties layer={selected} controls={controls} />}
+      {selected.type === 'barcode' && <BarcodeProperties layer={selected} controls={controls} />}
 
-      {selected.type !== 'fill' && selected.type !== 'image' && selected.type !== 'video' && (
+      {selected.type !== 'fill' && selected.type !== 'image' && selected.type !== 'video' && selected.type !== 'barcode' && (
         <PropertyRow label="Color">
           <ColorPicker
             value={selected.color}
@@ -774,6 +785,7 @@ export function ControllerPage() {
               onAddIcon={addIcon}
               onAddImage={addImage}
               onAddVideo={addVideo}
+              onAddBarcode={addBarcode}
             />
           )}
         </div>
@@ -943,6 +955,7 @@ export function ControllerPage() {
               onAddIcon={addIcon}
               onAddImage={addImage}
               onAddVideo={addVideo}
+              onAddBarcode={addBarcode}
             />
           </div>
         </div>

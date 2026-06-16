@@ -12,6 +12,7 @@ import type { FillLayer } from './fill'
 import type { IconLayer } from './icon'
 import type { ImageLayer } from './image'
 import type { VideoLayer } from './video'
+import type { BarcodeLayer } from './barcode'
 import type { GridSettings } from './grid'
 
 export * from './base'
@@ -22,10 +23,11 @@ export * from './fill'
 export * from './icon'
 export * from './image'
 export * from './video'
+export * from './barcode'
 export * from './grid'
 
 /** Union of all known layer types. Grows as new types are added. */
-export type Layer = TextLayer | ShapeLayer | FillLayer | IconLayer | ImageLayer | VideoLayer
+export type Layer = TextLayer | ShapeLayer | FillLayer | IconLayer | ImageLayer | VideoLayer | BarcodeLayer
 
 /** A full slide: an ordered list of layers plus an optional scene-wide grid overlay. */
 export interface Scene {

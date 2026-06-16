@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import {
   IconBackground,
+  IconBarcode,
   IconChevronDown,
   IconChevronUp,
   IconChevronsDown,
@@ -100,6 +101,7 @@ function LayerIcon({ layer }: { layer: Layer }) {
   if (layer.type === 'icon') return <IconVectorSpline size={11} className="shrink-0" />
   if (layer.type === 'image') return <IconPhoto size={11} className="shrink-0" />
   if (layer.type === 'video') return <IconMovie size={11} className="shrink-0" />
+  if (layer.type === 'barcode') return <IconBarcode size={11} className="shrink-0" />
   if (layer.shape === 'circle') return <IconCircle size={11} className="shrink-0" />
   return <IconSquare size={11} className="shrink-0" />
 }
@@ -111,6 +113,7 @@ export function layerLabel(layer: Layer): string {
   if (layer.type === 'icon') return findIconDef(layer.icon_id)?.def.label ?? 'Icon'
   if (layer.type === 'image') return layer.url ? 'Image' : 'Image (empty)'
   if (layer.type === 'video') return layer.url ? 'Video' : 'Video (empty)'
+  if (layer.type === 'barcode') return layer.code ? `Barcode ${layer.code}` : 'Barcode'
   return (layer as Layer).type
 }
 
