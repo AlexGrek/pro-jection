@@ -7,6 +7,7 @@ import {
   IconDeviceFloppy,
   IconDeviceGamepad2,
   IconExternalLink,
+  IconFileZip,
   IconFolderOpen,
   IconKeyboard,
   IconPlayerPlay,
@@ -14,6 +15,7 @@ import {
   IconAdjustmentsHorizontal,
   IconSparkles,
   IconStack2,
+  IconX,
 } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { PhaserCanvas, type PhaserCanvasHandle } from '@/components/PhaserCanvas'
@@ -68,6 +70,7 @@ import {
   type VideoLayer,
 } from '@/lib/scene'
 import { CANVAS_H, CANVAS_W } from '@/lib/phaser/constants'
+import { downloadSceneArchive, uploadSceneArchive } from '@/lib/sceneArchive'
 
 type ConnState = 'connecting' | 'connected' | 'disconnected' | 'error'
 
@@ -561,6 +564,9 @@ export function ControllerPage() {
     { open: false, title: 'Save Scene', name: '' },
   )
 
+  const [archiveError, setArchiveError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+
   // Upload keys referenced by the current scene's image and video layers (deduped).
   const collectArtifacts = (objs: Layer[]): string[] => {
     const keys = objs
@@ -569,13 +575,21 @@ export function ControllerPage() {
     return [...new Set(keys)]
   }
 
+  // The full scene as it stands: layers plus the two scene-wide settings. Shared by every
+  // path that ships the canvas somewhere — save, re-save and ZIP export.
+  const currentScene = (objs: Layer[]): Scene => ({
+    objects: objs,
+    grid: gridRef.current ?? undefined,
+    projection: projectionRef.current ?? undefined,
+  })
+
   // POST a new saved scene (first save of a new scene, or "Save As").
   const createScene = useCallback(async (name: string) => {
     const objs = objectsRef.current
     const resp = await fetch('/api/scenes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, scene: { objects: objs, grid: gridRef.current ?? undefined, projection: projectionRef.current ?? undefined }, artifacts: collectArtifacts(objs) }),
+      body: JSON.stringify({ name, scene: currentScene(objs), artifacts: collectArtifacts(objs) }),
     })
     if (!resp.ok) return
     const meta = (await resp.json()) as SavedSceneMeta
@@ -593,7 +607,7 @@ export function ControllerPage() {
     const resp = await fetch(`/api/scenes/${currentSceneId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: currentSceneName, scene: { objects: objs, grid: gridRef.current ?? undefined, projection: projectionRef.current ?? undefined }, artifacts: collectArtifacts(objs) }),
+      body: JSON.stringify({ name: currentSceneName, scene: currentScene(objs), artifacts: collectArtifacts(objs) }),
     })
     if (resp.status === 404) {
       // Scene expired or was deleted server-side — fall back to creating a fresh one.
@@ -610,10 +624,9 @@ export function ControllerPage() {
     })
   }
 
-  const openSavedScene = useCallback(async (meta: SavedSceneMeta) => {
-    const resp = await fetch(`/api/scenes/${meta.id}`)
-    if (!resp.ok) return
-    const data = (await resp.json()) as { id: string; name: string; scene: Scene }
+  // Adopt a stored scene: onto the canvas, out to the projectors, and remembered as the
+  // scene the Save button re-saves. Shared by "open saved scene" and ZIP import.
+  const loadStoredScene = useCallback((data: { id: string; name: string; scene: Scene }) => {
     const objs = data.scene.objects ?? []
     gridRef.current = data.scene.grid ?? null
     setGrid(data.scene.grid ?? null)
@@ -626,6 +639,36 @@ export function ControllerPage() {
     setCurrentSceneId(data.id)
     setCurrentSceneName(data.name)
   }, [applyObjects, sendNow])
+
+  const openSavedScene = useCallback(async (meta: SavedSceneMeta) => {
+    const resp = await fetch(`/api/scenes/${meta.id}`)
+    if (!resp.ok) return
+    loadStoredScene((await resp.json()) as { id: string; name: string; scene: Scene })
+  }, [loadStoredScene])
+
+  // ── ZIP archives ──────────────────────────────────────────────────────────
+  // The backend packs and unpacks; it owns the uploads. Export ships whatever is on the
+  // canvas right now, saved or not.
+
+  const exportArchive = async () => {
+    setExporting(true)
+    setArchiveError(null)
+    try {
+      const objs = objectsRef.current
+      await downloadSceneArchive(currentSceneName || `Scene ${code}`, currentScene(objs), collectArtifacts(objs))
+    } catch (err) {
+      setArchiveError(err instanceof Error ? err.message : 'Export failed')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  // Import saves the archive server-side and returns it, so the imported scene arrives with a
+  // real id — the Save button re-saves it in place from here on.
+  const importArchive = useCallback(async (file: File) => {
+    setArchiveError(null)
+    loadStoredScene(await uploadSceneArchive(file))
+  }, [loadStoredScene, setArchiveError])
 
   const controls = useMemo<PropertyControls>(() => ({
     patch: patchSelected,
@@ -764,6 +807,7 @@ export function ControllerPage() {
         open={openDialogOpen}
         onOpenChange={setOpenDialogOpen}
         onOpen={openSavedScene}
+        onImport={importArchive}
       />
     </>
   )
@@ -782,6 +826,20 @@ export function ControllerPage() {
           Retry
         </Button>
       )}
+    </div>
+  )
+
+  const archiveBanner = archiveError && (
+    <div className="flex items-center gap-3 bg-red-950/60 border-b border-red-800/50 text-red-300 px-4 py-3 text-sm font-light shrink-0">
+      <span className="flex-1">{archiveError}</span>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="text-red-400 hover:text-white hover:bg-red-900/50 px-2"
+        onClick={() => setArchiveError(null)}
+      >
+        <IconX size={14} stroke={1.5} />
+      </Button>
     </div>
   )
 
@@ -847,6 +905,16 @@ export function ControllerPage() {
             >
               <IconCopy size={15} stroke={1.5} />
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-slate-400 hover:text-white hover:bg-slate-800 px-2"
+              title="Export ZIP (scene + assets)"
+              onClick={exportArchive}
+              disabled={exporting}
+            >
+              <IconFileZip size={15} stroke={1.5} />
+            </Button>
             <GridControl grid={grid} onChange={changeGrid} disabled={connState !== 'connected'} />
             <ProjectionControl
               projection={projection}
@@ -892,6 +960,7 @@ export function ControllerPage() {
         </header>
 
         {errorBanner}
+        {archiveBanner}
         {disconnectBanner}
 
         {/* Canvas — 16:9 full width, capped so landscape doesn't eat the whole screen */}
@@ -1009,6 +1078,16 @@ export function ControllerPage() {
             <IconCopy size={15} stroke={1.5} />
             Save As
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-slate-400 hover:text-white hover:bg-slate-800 px-2"
+            title="Export ZIP (scene + assets)"
+            onClick={exportArchive}
+            disabled={exporting}
+          >
+            <IconFileZip size={15} stroke={1.5} />
+          </Button>
           <GridControl grid={grid} onChange={changeGrid} disabled={connState !== 'connected'} />
           <ProjectionControl
             projection={projection}
@@ -1063,6 +1142,7 @@ export function ControllerPage() {
       </header>
 
       {errorBanner}
+      {archiveBanner}
       {disconnectBanner}
 
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">

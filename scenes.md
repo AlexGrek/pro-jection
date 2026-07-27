@@ -88,6 +88,63 @@ Delete the scene and any artifacts it alone referenced. **Response `204`**.
 
 ---
 
+## ZIP archives
+
+A scene can leave the server as a single portable `.zip` and come back on another deployment,
+carrying its uploads with it. Implemented in [archive.rs](backend/src/routes/archive.rs).
+
+```text
+scene.json      { "format": "pro-jection-scene", "version": 1, "name", "exported_at",
+                  "artifacts": ["a1b2.png"], "scene": { "objects": [ … ] } }
+assets/a1b2.png one entry per referenced upload, stored under its original key
+```
+
+The backend packs and unpacks because it owns the uploads — the frontend never sees them. It
+still does not parse scene content: the blob is a `RawValue` from end to end, and **assets keep
+their original `uploads/` key across the round trip**, so the `/api/useruploads/{key}` URLs
+inside the blob keep resolving without anyone rewriting them. Keys are UUIDs, so a key that
+already exists on import is the same file and is left alone.
+
+`scene.json` is deflated; assets are stored uncompressed (they are already-compressed media).
+An archive re-zipped with a wrapping folder (`my-scene/scene.json`, as Finder and Explorer
+produce) still imports — the manifest's own directory is taken as the archive root.
+
+### `POST /api/scenes/export`
+Export the scene in the request body — the controller's live canvas, saved or not. Same body
+as `POST /api/scenes` (`{ name, artifacts, scene }`). **Response `200`** `application/zip` with
+a `Content-Disposition` filename derived from the scene name. Artifacts that are no longer in
+storage are skipped with a warning rather than failing the export.
+
+### `GET /api/scenes/{id}/export`
+Export an already-saved scene. A plain `GET` so the UI can point an `<a download>` straight at
+it. `404` if the scene is gone.
+
+### `POST /api/scenes/import`
+Multipart (`file` = the ZIP, 200 MB cap). Writes back the uploads the archive carries, then
+saves the scene under a **fresh id** with a fresh `saved_at` — importing never overwrites an
+existing scene, and the imported scene starts its own 14-day clock. **Response `200`** is the
+full stored scene, the same shape as `GET /api/scenes/{id}`, so the controller can apply it to
+the canvas without a second round trip. `400` with a plain-text reason for a non-ZIP, a missing
+`scene.json`, a foreign `format`, a `version` newer than the server knows, or contents past the
+400 MB unpacked ceiling.
+
+Import ignores entries it should not trust: an asset key that is not a plain upload file name
+(path separators, traversal, a nested directory, an extension the upload endpoint would have
+rejected) is skipped and logged. The same guard,
+[`valid_artifact_key`](backend/src/routes/scenes.rs), also filters the `artifacts` list on
+every save — those keys end up in `storage.delete` calls when a scene is re-saved or deleted.
+
+### Frontend
+
+[sceneArchive.ts](frontend/src/lib/sceneArchive.ts) wraps the three endpoints. In the
+controller: the header's ZIP button exports the live canvas, and
+[SceneStorageDialogs.tsx](frontend/src/components/controller/SceneStorageDialogs.tsx) adds a
+per-row export link plus an "Import from ZIP…" action to the Open dialog. An imported scene is
+adopted like an opened one (`loadStoredScene` — canvas, projectors, and the id/name the Save
+button re-saves).
+
+---
+
 ## Frontend integration
 
 The controller ([ControllerPage.tsx](frontend/src/pages/ControllerPage.tsx)) tracks

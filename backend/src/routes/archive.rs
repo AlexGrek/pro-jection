@@ -175,13 +175,16 @@ pub async fn export_saved(Path(id): Path<String>, State(state): State<Arc<AppSta
     build(&state.storage, stored.name, stored.artifacts, stored.scene).await
 }
 
+/// One unpacked archive: the raw `scene.json` bytes plus its `(upload key, bytes)` assets.
+type Unpacked = (Vec<u8>, Vec<(String, Vec<u8>)>);
+
 /// Unpack an archive into its manifest bytes and `(key, bytes)` assets. Blocking — call from
 /// [`tokio::task::spawn_blocking`].
 ///
 /// Tolerates archives that were re-zipped with a wrapping folder (`my-scene/scene.json`) by
 /// taking the manifest's own directory as the root. Entries outside that root, asset keys that
 /// are not plain file names, and anything past [`MAX_UNPACKED`] are skipped.
-fn unpack(bytes: Vec<u8>) -> Result<(Vec<u8>, Vec<(String, Vec<u8>)>), String> {
+fn unpack(bytes: Vec<u8>) -> Result<Unpacked, String> {
     let mut zip = ZipArchive::new(Cursor::new(bytes)).map_err(|e| format!("not a ZIP archive: {e}"))?;
 
     let root = (0..zip.len())
@@ -195,7 +198,7 @@ fn unpack(bytes: Vec<u8>) -> Result<(Vec<u8>, Vec<(String, Vec<u8>)>), String> {
     let mut unpacked: u64 = 0;
 
     for i in 0..zip.len() {
-        let mut file = zip.by_index(i).map_err(|e| format!("unreadable entry: {e}"))?;
+        let file = zip.by_index(i).map_err(|e| format!("unreadable entry: {e}"))?;
         if file.is_dir() {
             continue;
         }
@@ -213,14 +216,18 @@ fn unpack(bytes: Vec<u8>) -> Result<(Vec<u8>, Vec<(String, Vec<u8>)>), String> {
             continue;
         }
 
-        unpacked += file.size();
-        if unpacked > MAX_UNPACKED {
+        // Bound what we actually read, not what the entry header claims: a hostile archive can
+        // declare a small `size()` and then hand over gigabytes.
+        let budget = MAX_UNPACKED - unpacked;
+        let mut buf = Vec::new();
+        let read = file
+            .take(budget + 1)
+            .read_to_end(&mut buf)
+            .map_err(|e| format!("failed to read {name}: {e}"))? as u64;
+        if read > budget {
             return Err("archive contents exceed the size limit".to_string());
         }
-
-        let mut buf = Vec::with_capacity(file.size() as usize);
-        file.read_to_end(&mut buf)
-            .map_err(|e| format!("failed to read {name}: {e}"))?;
+        unpacked += read;
 
         match asset_key {
             Some(key) => files.push((key.to_string(), buf)),

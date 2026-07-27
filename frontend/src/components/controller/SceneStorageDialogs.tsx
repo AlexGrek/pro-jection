@@ -143,6 +143,8 @@ function SceneList({
   // load below fires immediately — so the effect never sets state synchronously.
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(() => {
     fetch('/api/scenes')

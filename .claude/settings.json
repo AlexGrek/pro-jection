@@ -60,7 +60,13 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type} %{size_download}b\\\\n\" localhost:8080/api/useruploads/b39d8327-3a98-4fc1-b991-97d309db4857.png)",
       "Bash(echo \"uploads dir:\" && ls /Users/vedmedik/dev/pro-jection/backend/storage/uploads/ && echo \"--- traversal check \\(should not exist\\):\" && ls /Users/vedmedik/dev/pro-jection/etc 2>&1 | head -2; ls /etc/pwn.png 2>&1 | head -1; echo \"--- warnings in log:\" && grep -i \"skipped\\\\|invalid artifact\" /tmp/claude-502/-Users-vedmedik-dev-pro-jection/5402baab-06b0-45d0-8033-d8f78956bb5e/scratchpad/backend.log | tail -5)",
       "Read(//etc/**)",
-      "Bash(xargs -I{} echo \"tracked files matching: {}\")"
+      "Bash(xargs -I{} echo \"tracked files matching: {}\")",
+      "Bash(perl -0pi -e 's/\\(\\\\{errorBanner\\\\}\\\\n\\(\\\\s*\\)\\\\{disconnectBanner\\\\}\\)/{errorBanner}\\\\n$2{archiveBanner}\\\\n$2{disconnectBanner}/g' src/pages/ControllerPage.tsx)",
+      "Bash(curl -s -o /dev/null -w \"backend direct: %{http_code}\\\\n\" localhost:8080/api/scenes)",
+      "Bash(cargo run *)",
+      "Bash(curl -s -o proxy.zip -w \"%{http_code} %{content_type}\\\\n\" -X POST -H 'Content-Type: application/json' -d @scene.json localhost:5173/api/scenes/export)",
+      "Bash(unzip -l proxy.zip)",
+      "Bash(curl -s -w \" [%{http_code}]\\\\n\" -F \"file=@proxy.zip\" localhost:5173/api/scenes/import)"
     ],
     "additionalDirectories": [
       "/tmp"
