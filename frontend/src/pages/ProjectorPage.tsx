@@ -55,8 +55,14 @@ export function ProjectorPage() {
   }, [code])
 
   useEffect(() => {
-    connect()
-    return () => wsRef.current?.close()
+    // Deferred so StrictMode's synchronous remount in dev cancels the first
+    // attempt instead of opening a socket it discards. See ControllerPage, where
+    // the same race costs the exclusive controller slot.
+    const pending = setTimeout(connect, 0)
+    return () => {
+      clearTimeout(pending)
+      wsRef.current?.close()
+    }
   }, [connect])
 
   // Auto-reconnect — projector should always be up.

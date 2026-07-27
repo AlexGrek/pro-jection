@@ -286,8 +286,16 @@ export function ControllerPage() {
   }, [code, applyObjects])
 
   useEffect(() => {
-    connect()
-    return () => wsRef.current?.close()
+    // Open on a timeout rather than inline. StrictMode mounts, tears down and
+    // remounts effects synchronously in dev, so an inline connect opens a socket
+    // it immediately closes — and the server can accept the replacement before it
+    // has processed that close, rejecting it as a duplicate controller. Deferring
+    // lets the teardown cancel the attempt so the page never races itself.
+    const pending = setTimeout(connect, 0)
+    return () => {
+      clearTimeout(pending)
+      wsRef.current?.close()
+    }
   }, [connect])
 
   // ── Canvas callbacks ──────────────────────────────────────────────────────
