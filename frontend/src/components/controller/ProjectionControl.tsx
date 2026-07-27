@@ -8,7 +8,13 @@ import {
   IconPerspective,
 } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
-import { CORNER_LABELS, defaultProjection, type ProjectionSettings } from '@/lib/scene'
+import {
+  CALIBRATION_COLORS,
+  CORNER_LABELS,
+  DEFAULT_CALIBRATION_COLOR,
+  defaultProjection,
+  type ProjectionSettings,
+} from '@/lib/scene'
 
 /** Nudge steps in canvas pixels, matching the arrow-key steps on desktop. */
 const NUDGE_SMALL = 1
@@ -103,6 +109,29 @@ export function ProjectionControl({
                   <p className="px-3 pb-1 text-[10px] font-light text-slate-600 leading-snug">
                     Shows corner handles here and an alignment grid on every projector.
                   </p>
+                  {cornerEditing && (
+                    <div className="px-3 py-1.5 flex items-center gap-2">
+                      <span className="text-[10px] text-slate-500 uppercase tracking-wider mr-auto">
+                        Grid colour
+                      </span>
+                      {CALIBRATION_COLORS.map((c) => {
+                        const selected = (projection.color ?? DEFAULT_CALIBRATION_COLOR) === c.id
+                        return (
+                          <button
+                            key={c.id}
+                            title={c.label}
+                            onClick={() => onChange({ ...projection, color: c.id })}
+                            style={{ backgroundColor: c.hex }}
+                            className={`w-5 h-5 rounded-full transition-all ${
+                              selected
+                                ? 'ring-2 ring-offset-2 ring-offset-slate-900 ring-white'
+                                : 'opacity-50 hover:opacity-100'
+                            }`}
+                          />
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div className="border-t border-slate-800 py-1">

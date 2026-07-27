@@ -25,7 +25,31 @@ export interface ProjectionSettings {
    * real surface, and the controller additionally shows draggable corner handles.
    */
   editing?: boolean
+  /**
+   * Colour of the calibration grid. Rides on the wire with `editing` — the point
+   * is to pick something that reads against the actual projection surface, so the
+   * projector has to know. Absent = the default preset.
+   */
+  color?: CalibrationColor
 }
+
+/**
+ * Calibration grid palette. Deliberately three high-visibility choices rather than
+ * a free colour picker: this is a legibility control for the physical surface, not
+ * a design decision.
+ */
+export type CalibrationColor = 'yellow' | 'cyan' | 'red'
+
+export const CALIBRATION_COLORS: { id: CalibrationColor; label: string; hex: string }[] = [
+  { id: 'yellow', label: 'Yellow', hex: '#facc15' },
+  { id: 'cyan', label: 'Cyan', hex: '#22d3ee' },
+  { id: 'red', label: 'Red', hex: '#ef4444' },
+]
+
+export const DEFAULT_CALIBRATION_COLOR: CalibrationColor = 'yellow'
+
+export const calibrationHex = (color?: CalibrationColor): string =>
+  (CALIBRATION_COLORS.find((c) => c.id === color) ?? CALIBRATION_COLORS[0]).hex
 
 export const CORNER_LABELS = ['Top left', 'Top right', 'Bottom right', 'Bottom left'] as const
 
@@ -50,6 +74,7 @@ export const cloneCorners = (c: Corners): Corners => [{ ...c[0] }, { ...c[1] }, 
 export const defaultProjection = (): ProjectionSettings => ({
   corners: cloneCorners(IDENTITY_CORNERS),
   editing: true,
+  color: DEFAULT_CALIBRATION_COLOR,
 })
 
 /**

@@ -17,15 +17,32 @@ interface CodeInputProps {
 }
 
 export function CodeInput({ open, onOpenChange, onCodeComplete, title }: CodeInputProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent showClose className="sm:max-w-sm">
+        <DialogHeader className="items-center text-center">
+          <IconLock size={28} stroke={1} className="text-muted-foreground mb-1" />
+          <DialogTitle className="font-light text-xl">{title}</DialogTitle>
+          <DialogDescription className="font-light">
+            Enter the 6-digit numeric code to continue.
+          </DialogDescription>
+        </DialogHeader>
+        {/* Mounted only while the dialog is open, so the digits start empty on
+            every open without an effect resetting them. */}
+        <CodeDigits onCodeComplete={onCodeComplete} />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function CodeDigits({ onCodeComplete }: { onCodeComplete: (code: string) => void }) {
   const [digits, setDigits] = useState(['', '', '', '', '', ''])
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
   useEffect(() => {
-    if (open) {
-      setDigits(['', '', '', '', '', ''])
-      setTimeout(() => inputRefs.current[0]?.focus(), 80)
-    }
-  }, [open])
+    const id = setTimeout(() => inputRefs.current[0]?.focus(), 80)
+    return () => clearTimeout(id)
+  }, [])
 
   const handleChange = (index: number, value: string) => {
     const last = value.slice(-1)
@@ -62,31 +79,20 @@ export function CodeInput({ open, onOpenChange, onCodeComplete, title }: CodeInp
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent showClose className="sm:max-w-sm">
-        <DialogHeader className="items-center text-center">
-          <IconLock size={28} stroke={1} className="text-muted-foreground mb-1" />
-          <DialogTitle className="font-light text-xl">{title}</DialogTitle>
-          <DialogDescription className="font-light">
-            Enter the 6-digit numeric code to continue.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex justify-center gap-2 py-2">
-          {digits.map((digit, i) => (
-            <Input
-              key={i}
-              ref={(el) => { inputRefs.current[i] = el }}
-              type="text"
-              inputMode="numeric"
-              maxLength={2}
-              value={digit}
-              onChange={(e) => handleChange(i, e.target.value)}
-              onKeyDown={(e) => handleKeyDown(i, e)}
-              className="w-11 h-14 text-center text-2xl font-light px-0 tracking-tight"
-            />
-          ))}
-        </div>
-      </DialogContent>
-    </Dialog>
+    <div className="flex justify-center gap-2 py-2">
+      {digits.map((digit, i) => (
+        <Input
+          key={i}
+          ref={(el) => { inputRefs.current[i] = el }}
+          type="text"
+          inputMode="numeric"
+          maxLength={2}
+          value={digit}
+          onChange={(e) => handleChange(i, e.target.value)}
+          onKeyDown={(e) => handleKeyDown(i, e)}
+          className="w-11 h-14 text-center text-2xl font-light px-0 tracking-tight"
+        />
+      ))}
+    </div>
   )
 }

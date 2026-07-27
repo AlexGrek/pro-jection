@@ -16,6 +16,40 @@ pub struct UploadResponse {
     url: String,
 }
 
+/// File extensions accepted as uploads. Shared with the ZIP importer
+/// ([`crate::routes::archive`]) so an archive can never smuggle in a kind of file that the
+/// upload endpoint would have rejected.
+pub fn ext_allowed(ext: &str) -> bool {
+    matches!(
+        ext,
+        "png" | "jpg" | "jpeg" | "webp" | "svg" | "mp4" | "webm" | "ogv" | "mov"
+    )
+}
+
+/// Lowercased extension of a file name, or `""` when it has none.
+pub fn ext_of(name: &str) -> String {
+    std::path::Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase()
+}
+
+/// Content type served for an uploaded key's extension.
+pub fn content_type_for(ext: &str) -> &'static str {
+    match ext {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "ogv" => "video/ogg",
+        "mov" => "video/quicktime",
+        _ => "application/octet-stream",
+    }
+}
+
 pub async fn upload(
     State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
@@ -30,16 +64,9 @@ pub async fn upload(
         }
 
         let filename = field.file_name().unwrap_or("upload").to_string();
-        let ext = std::path::Path::new(&filename)
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("bin")
-            .to_lowercase();
+        let ext = ext_of(&filename);
 
-        if !matches!(
-            ext.as_str(),
-            "png" | "jpg" | "jpeg" | "webp" | "svg" | "mp4" | "webm" | "ogv" | "mov"
-        ) {
+        if !ext_allowed(&ext) {
             return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE);
         }
 
@@ -70,22 +97,7 @@ pub async fn serve(
     let storage_path = format!("uploads/{key}");
     match state.storage.read(&storage_path).await {
         Ok(buf) => {
-            let ext = std::path::Path::new(&key)
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("")
-                .to_lowercase();
-            let content_type = match ext.as_str() {
-                "png" => "image/png",
-                "jpg" | "jpeg" => "image/jpeg",
-                "webp" => "image/webp",
-                "svg" => "image/svg+xml",
-                "mp4" => "video/mp4",
-                "webm" => "video/webm",
-                "ogv" => "video/ogg",
-                "mov" => "video/quicktime",
-                _ => "application/octet-stream",
-            };
+            let content_type = content_type_for(&ext_of(&key));
             let mut headers = HeaderMap::new();
             headers.insert(
                 header::CONTENT_TYPE,

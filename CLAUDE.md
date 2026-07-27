@@ -80,7 +80,7 @@ Type-specific UI lives under [components/controller/](frontend/src/components/co
 - [LayerRow.tsx](frontend/src/components/controller/LayerRow.tsx) — single row in the Layers panel with reorder buttons (front/forward/backward/back).
 - [AddObjectPanel.tsx](frontend/src/components/controller/AddObjectPanel.tsx) — Text / Rectangle / Circle / Background / Icon / Image / Video buttons.
 - [GridControl.tsx](frontend/src/components/controller/GridControl.tsx) — header popover toggling the scene-wide grid overlay and picking its pattern (off / grid / dots / thirds / columns).
-- [ProjectionControl.tsx](frontend/src/components/controller/ProjectionControl.tsx) — header popover for the scene-wide keystone warp: on/off, flat-vs-projected preview, calibration mode, the corner picker with live readouts, a nudge pad, and reset.
+- [ProjectionControl.tsx](frontend/src/components/controller/ProjectionControl.tsx) — header popover for the scene-wide keystone warp: on/off, flat-vs-projected preview, calibration mode plus its grid-colour swatches, the corner picker with live readouts, a nudge pad, and reset.
 - [PropertyRow.tsx](frontend/src/components/controller/PropertyRow.tsx) — shared label/content row layout.
 
 Send timing per input kind:
@@ -90,7 +90,7 @@ Send timing per input kind:
 | Font / Shape / Fill kind / Add layer / Reorder / Drag-end | `sendNow` immediate |
 | Sliders (size, alpha, width, height, stroke, angle, stop alpha) | preview on `onChange`, `sendCurrent` on `onPointerUp` / `onKeyUp` |
 | Mouse-wheel resize (text / shape / icon / image / video) | `sendDebounced` (350 ms) per tick |
-| Projection on/off / reset / calibration toggle | `sendNow` immediate |
+| Projection on/off / reset / calibration toggle / grid colour | `sendNow` immediate |
 | Projection corner drag | throttled `sendNow` (500 ms, throttled in the scene) + `sendNow` on drag-end |
 | Projection corner arrow-key nudge | `sendDebounced` (350 ms) per repeat, `sendNow` on key-up |
 | Color picker ([ColorPicker.tsx](frontend/src/components/controller/ColorPicker.tsx)) | `sendDebounced` (350 ms) while tuning (slider drag / hex typing / system-picker drag) via `onChange(hex)`; `sendNow` on release / swatch click / hex blur / system close / popover dismiss via `onCommit(hex)` |
@@ -113,10 +113,10 @@ lib/scene/
 ├── image.ts    # ImageLayer (url + width; height from aspect ratio) + DEFAULT_IMAGE_LAYER
 ├── video.ts    # VideoLayer (url + width + loop + muted; height from aspect ratio) + DEFAULT_VIDEO_LAYER
 ├── grid.ts     # GridSettings (scene-wide overlay, not a layer) + GRID_TYPES + DEFAULT_GRID
-└── projection.ts # ProjectionSettings (scene-wide keystone warp) + IDENTITY_CORNERS + isValidCorners/withCorner
+└── projection.ts # ProjectionSettings (scene-wide keystone warp) + IDENTITY_CORNERS + isValidCorners/withCorner + CALIBRATION_COLORS
 ```
 
-`BaseLayer` carries `id`, `x` and `y` (0–1), `opacity` (0–1), `animations: {}`, and `modifiers: []`. `Layer` is the discriminated union of `TextLayer | ShapeLayer | FillLayer | IconLayer | ImageLayer | VideoLayer`. Adding a new layer type means: add a file under `lib/scene/`, extend the `Layer` union in `index.ts`, add a renderer under `lib/phaser/renderers/`, and add a Properties component under `components/controller/`. See [images.md](images.md) for a worked example. `Scene` also carries two scene-wide settings that are not layers and ride along on every send/apply: `grid?: GridSettings` (an overlay drawn by `ProjectionScene` above all layers) and `projection?: ProjectionSettings` (the keystone warp — four corners in normalised canvas coordinates, plus an `editing` flag). Absent means off in both cases.
+`BaseLayer` carries `id`, `x` and `y` (0–1), `opacity` (0–1), `animations: {}`, and `modifiers: []`. `Layer` is the discriminated union of `TextLayer | ShapeLayer | FillLayer | IconLayer | ImageLayer | VideoLayer`. Adding a new layer type means: add a file under `lib/scene/`, extend the `Layer` union in `index.ts`, add a renderer under `lib/phaser/renderers/`, and add a Properties component under `components/controller/`. See [images.md](images.md) for a worked example. `Scene` also carries two scene-wide settings that are not layers and ride along on every send/apply: `grid?: GridSettings` (an overlay drawn by `ProjectionScene` above all layers) and `projection?: ProjectionSettings` (the keystone warp — four corners in normalised canvas coordinates, plus `editing` and the calibration-grid `color`). Absent means off in both cases.
 
 ## Phaser integration
 
@@ -165,7 +165,7 @@ Summary: `GET /api/sessions/{code}/history` returns the full stack and cursor; `
 - The projector page auto-reconnects; the controller page does not (manual reconnect button only, to surface the "already connected" error clearly).
 - Phaser game instances are owned by `PhaserCanvas` and destroyed on unmount. Never call `game.destroy()` from outside the component. Communicate with the scene exclusively through `PhaserCanvasHandle` (`applyScene`, `selectObject`, `getScene`).
 - Don't add Phaser audio or physics. Layer kinds are text / shape / fill / icon / image / video — extend by adding a new file under [lib/scene/](frontend/src/lib/scene/) plus a matching renderer in [lib/phaser/renderers/](frontend/src/lib/phaser/renderers/), not by reaching into the existing renderers. Video uses `Video.loadURL` (no preload loader), plays muted+looping by default, and reveals itself on the `created` event once its aspect ratio is known.
-- The projector always renders the projection. The controller's Flat/Projected switch is a **local preview** — it lives in React state and is never serialised into the scene. Calibration mode (`projection.editing`) *is* on the scene on purpose: every client draws the warped alignment grid while it is on, so you can see the quad land on the real surface.
+- The projector always renders the projection. The controller's Flat/Projected switch is a **local preview** — it lives in React state and is never serialised into the scene. Calibration mode (`projection.editing`) *is* on the scene on purpose: every client draws the warped alignment grid while it is on, so you can see the quad land on the real surface. Its `color` (yellow / cyan / red, [CALIBRATION_COLORS](frontend/src/lib/scene/projection.ts)) travels for the same reason — it is a legibility control for the physical surface, not a design choice, which is why it is a fixed palette rather than a colour picker. The grid's white border and diagonals stay white at any setting: they are the structural reference and want maximum contrast.
 - Corner edits go through `withCorner`/`isValidCorners` ([scene/projection.ts](frontend/src/lib/scene/projection.ts)), which reject a fold. A non-convex quad makes the homography singular and the browser clips the canvas away entirely — it reads as the projection crashing.
 - Auto-send is the contract: never reintroduce a Send button. Mutations always go `patch → applyObjects → sendNow/sendDebounced/sendCurrent`. Sliders preview on `onChange` and commit on release/blur — don't send during continuous input. The colour picker is the exception: it **streams debounced sends while tuning** (`onChange → sendDebounced`) and flushes an immediate `sendNow` on commit. Because its `onCommit(hex)` carries the final hex, callers send the freshly-`patch`ed array directly (`sendNow(patch({ color: hex }))`) rather than `sendCurrent` — `objectsRef` lags a render, so a synchronous swatch/system commit via `sendCurrent` would send the previous colour.
 - The Vite proxy must cover `/api` as well as `/ws` and `/health` paths.

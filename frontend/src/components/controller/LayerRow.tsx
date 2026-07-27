@@ -108,7 +108,7 @@ function LayerIcon({ layer }: { layer: Layer }) {
   return <IconSquare size={11} className="shrink-0" />
 }
 
-export function layerLabel(layer: Layer): string {
+function layerLabel(layer: Layer): string {
   if (layer.type === 'text') return layer.text || '(empty)'
   if (layer.type === 'shape') return layer.shape === 'circle' ? 'Circle' : 'Rectangle'
   if (layer.type === 'fill') return layer.fill === 'linear' ? 'Gradient' : 'Solid Fill'

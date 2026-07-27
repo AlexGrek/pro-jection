@@ -11,6 +11,9 @@ use tower_http::trace::TraceLayer;
 use crate::routes;
 use crate::state::AppState;
 
+/// Upload ceiling for a scene ZIP on import, matching the single-file upload limit.
+const ARCHIVE_LIMIT: usize = 200 * 1024 * 1024;
+
 pub fn create_app(state: Arc<AppState>) -> Router {
     let static_dir = state.config.static_dir.clone();
 
@@ -52,12 +55,18 @@ pub fn create_app(state: Arc<AppState>) -> Router {
         .route("/api/sessions/{code}/history/undo", post(routes::history::undo))
         .route("/api/sessions/{code}/history/redo", post(routes::history::redo))
         .route("/api/scenes", get(routes::scenes::list).post(routes::scenes::create))
+        .route("/api/scenes/export", post(routes::archive::export_current))
+        .route(
+            "/api/scenes/import",
+            post(routes::archive::import_archive).layer(DefaultBodyLimit::max(ARCHIVE_LIMIT)),
+        )
         .route(
             "/api/scenes/{id}",
             get(routes::scenes::get)
                 .put(routes::scenes::update)
                 .delete(routes::scenes::remove),
         )
+        .route("/api/scenes/{id}/export", get(routes::archive::export_saved))
         .route("/api/useruploads", post(routes::assets::upload).layer(DefaultBodyLimit::max(200 * 1024 * 1024)))
         .route("/api/useruploads/{key}", get(routes::assets::serve))
         .nest_service("/assets", ServeDir::new(&assets_dir))

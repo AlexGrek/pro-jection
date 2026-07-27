@@ -29,13 +29,13 @@ const SCENE_TTL_SECS: u64 = 14 * 24 * 60 * 60;
 /// freshly uploaded image survives until the user saves the scene that uses it.
 const UPLOAD_GRACE: Duration = Duration::from_secs(24 * 60 * 60);
 
-/// Request body for create (`POST`) and re-save (`PUT`).
+/// Request body for create (`POST`), re-save (`PUT`) and ZIP export (`POST …/export`).
 #[derive(Deserialize)]
 pub struct SaveRequest {
-    name: String,
+    pub(crate) name: String,
     #[serde(default)]
-    artifacts: Vec<String>,
-    scene: Box<RawValue>,
+    pub(crate) artifacts: Vec<String>,
+    pub(crate) scene: Box<RawValue>,
 }
 
 /// On-disk representation of a saved scene.
@@ -66,24 +66,40 @@ impl From<&StoredScene> for SceneMeta {
     }
 }
 
-fn now_secs() -> u64 {
+pub(crate) fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
 }
 
-fn scene_path(id: &str) -> String {
+pub(crate) fn scene_path(id: &str) -> String {
     format!("scenes/{id}.json")
 }
 
-fn upload_path(key: &str) -> String {
+pub(crate) fn upload_path(key: &str) -> String {
     format!("uploads/{key}")
 }
 
 /// Reject ids that could escape the `scenes/` prefix via path traversal.
-fn valid_id(id: &str) -> bool {
+pub(crate) fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
+/// Reject artifact keys that could escape the `uploads/` prefix or name a file the upload
+/// endpoint would not have accepted.
+///
+/// Artifact lists are caller-supplied — by the frontend on save, by the manifest on ZIP import
+/// — and are pasted straight into [`upload_path`], which the delete paths then hand to
+/// `storage.delete`. A key must therefore stay a plain upload file name.
+pub(crate) fn valid_artifact_key(key: &str) -> bool {
+    !key.is_empty()
+        && key.len() <= 128
+        && !key.starts_with('.')
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        && crate::routes::assets::ext_allowed(&crate::routes::assets::ext_of(key))
 }
 
 /// Union of artifact keys referenced by every stored scene, optionally excluding one scene id.
@@ -115,7 +131,7 @@ pub async fn referenced_artifacts(storage: &Operator, exclude_id: Option<&str>) 
 }
 
 /// Read and deserialize a stored scene at a full storage path, logging+skipping on failure.
-async fn read_scene(storage: &Operator, path: &str) -> Option<StoredScene> {
+pub(crate) async fn read_scene(storage: &Operator, path: &str) -> Option<StoredScene> {
     let buf = match storage.read(path).await {
         Ok(b) => b,
         Err(e) => {
@@ -132,6 +148,20 @@ async fn read_scene(storage: &Operator, path: &str) -> Option<StoredScene> {
     }
 }
 
+/// Drop artifact keys that are not plain upload file names (see [`valid_artifact_key`]).
+fn sanitize_artifacts(artifacts: Vec<String>) -> Vec<String> {
+    artifacts
+        .into_iter()
+        .filter(|k| {
+            let ok = valid_artifact_key(k);
+            if !ok {
+                log::warn!("scenes: ignoring invalid artifact key {k:?}");
+            }
+            ok
+        })
+        .collect()
+}
+
 /// Delete each candidate upload that is not in `referenced`.
 async fn delete_unreferenced(storage: &Operator, candidates: &[String], referenced: &HashSet<String>) {
     for key in candidates {
@@ -145,7 +175,7 @@ async fn delete_unreferenced(storage: &Operator, candidates: &[String], referenc
     }
 }
 
-async fn write_scene(storage: &Operator, stored: &StoredScene) -> Result<(), Response> {
+pub(crate) async fn write_scene(storage: &Operator, stored: &StoredScene) -> Result<(), Response> {
     let body = serde_json::to_vec(stored).map_err(|e| {
         log::error!("scenes: serialize failed: {e}");
         StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -185,7 +215,7 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(req): Json<SaveRequ
         id: uuid::Uuid::new_v4().to_string(),
         name: req.name,
         saved_at: now_secs(),
-        artifacts: req.artifacts,
+        artifacts: sanitize_artifacts(req.artifacts),
         scene: req.scene,
     };
     if let Err(resp) = write_scene(&state.storage, &stored).await {
@@ -223,7 +253,7 @@ pub async fn update(
         id: id.clone(),
         name: req.name,
         saved_at: now_secs(),
-        artifacts: req.artifacts,
+        artifacts: sanitize_artifacts(req.artifacts),
         scene: req.scene,
     };
     if let Err(resp) = write_scene(&state.storage, &stored).await {

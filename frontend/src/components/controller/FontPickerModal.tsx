@@ -15,7 +15,9 @@ function loadFavorites(): FontId[] {
 function saveFavorites(ids: FontId[]): void {
   try {
     localStorage.setItem(FAVORITES_KEY, JSON.stringify(ids))
-  } catch {}
+  } catch {
+    // Favourites are best-effort: ignore quota / private-mode failures.
+  }
 }
 
 function FontTile({

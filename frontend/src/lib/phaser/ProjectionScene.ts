@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import type { GlowModifier, GridSettings, Layer, Modifier, ProjectionSettings, Scene } from '@/lib/scene'
-import { getArrayModifier, getGlowModifier, getMatrixModifier, isIdentityCorners, withCorner } from '@/lib/scene'
+import { calibrationHex, getArrayModifier, getGlowModifier, getMatrixModifier, isIdentityCorners, withCorner } from '@/lib/scene'
 import { GLOW_PERIOD_MAX, GLOW_PERIOD_MIN } from '@/lib/scene'
 import { hexToInt } from './colors'
 import { BARCODE_TEXTURE_PREFIX, CANVAS_H, CANVAS_W, CORNER_COLOR, CORNER_HANDLE_PX, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, GRID_DEPTH, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, PROJECTION_DEPTH, RAYS_TEXTURE_PREFIX } from './constants'
@@ -471,7 +471,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       this._calibration = this.add.graphics().setDepth(PROJECTION_DEPTH - 1)
     }
     this._calibration.setVisible(true)
-    drawCalibrationGrid(this._calibration)
+    drawCalibrationGrid(this._calibration, hexToInt(calibrationHex(this._projection.color)))
     this._drawCorners()
   }
 
