@@ -3,7 +3,7 @@ import type { GlowModifier, GridSettings, Layer, Modifier, ProjectionSettings, S
 import { calibrationHex, getArrayModifier, getGlowModifier, getMatrixModifier, isIdentityCorners, withCorner } from '@/lib/scene'
 import { GLOW_PERIOD_MAX, GLOW_PERIOD_MIN } from '@/lib/scene'
 import { hexToInt } from './colors'
-import { BARCODE_TEXTURE_PREFIX, CANVAS_H, CANVAS_W, CORNER_COLOR, CORNER_HANDLE_PX, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, GRID_DEPTH, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, PROJECTION_DEPTH, RAYS_TEXTURE_PREFIX } from './constants'
+import { BARCODE_TEXTURE_PREFIX, CANVAS_H, CANVAS_W, CORNER_COLOR, CORNER_GRAB_FACTOR, CORNER_HANDLE_PX, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, GRID_DEPTH, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, PROJECTION_DEPTH, RAYS_TEXTURE_PREFIX } from './constants'
 import { cornersToMatrix3d } from './warp'
 import { applyText } from './renderers/text'
 import { applyShape } from './renderers/shape'
@@ -520,20 +520,37 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
         .setFillStyle(CORNER_COLOR, selected ? 1 : 0.55)
       if (handle.radius !== radius) {
         handle.setRadius(radius)
-        // setRadius resizes the object but not the hit area captured at
-        // setInteractive time — re-issue it so the grab zone tracks the handle.
-        handle.setInteractive({ draggable: true, cursor: 'move' })
+        // Phaser captures the hit area when the object first becomes interactive
+        // and never revisits it — and setInteractive() will not rebuild an existing
+        // one. Resizing the circle therefore leaves the grab zone at its original
+        // size, offset up-left of the handle by a diameter, which puts three of the
+        // four corners outside the canvas and makes them impossible to grab. The
+        // hit area is our own Circle, so resize it in place alongside the handle.
+        const hit = handle.input?.hitArea as Phaser.Geom.Circle | undefined
+        hit?.setTo(radius, radius, radius * CORNER_GRAB_FACTOR)
       }
     })
   }
 
   private _createCornerHandles(): void {
     for (let i = 0; i < 4; i++) {
+      // Explicit circular hit area rather than the default derived one: it matches
+      // the drawn handle, and holding the reference lets `_drawCorners` keep it in
+      // sync when the radius is recomputed for the current canvas scale.
       const handle = this.add
         .circle(0, 0, CORNER_HANDLE_PX, CORNER_COLOR, 0.55)
         .setStrokeStyle(4, 0xffffff, 1)
         .setDepth(PROJECTION_DEPTH + 1)
-        .setInteractive({ draggable: true, cursor: 'move' })
+        .setInteractive(
+          new Phaser.Geom.Circle(
+            CORNER_HANDLE_PX,
+            CORNER_HANDLE_PX,
+            CORNER_HANDLE_PX * CORNER_GRAB_FACTOR,
+          ),
+          Phaser.Geom.Circle.Contains,
+        )
+      if (handle.input) handle.input.cursor = 'move'
+      this.input.setDraggable(handle)
 
       let lastSend = 0
       handle.on('drag', (_p: Phaser.Input.Pointer, dragX: number, dragY: number) => {

@@ -66,7 +66,8 @@
       "Bash(cargo run *)",
       "Bash(curl -s -o proxy.zip -w \"%{http_code} %{content_type}\\\\n\" -X POST -H 'Content-Type: application/json' -d @scene.json localhost:5173/api/scenes/export)",
       "Bash(unzip -l proxy.zip)",
-      "Bash(curl -s -w \" [%{http_code}]\\\\n\" -F \"file=@proxy.zip\" localhost:5173/api/scenes/import)"
+      "Bash(curl -s -w \" [%{http_code}]\\\\n\" -F \"file=@proxy.zip\" localhost:5173/api/scenes/import)",
+      "Bash(awk '/var Arc = new Class\\\\\\(/{f=1} f&&/radius: *\\\\{/{p=1} p{print NR\": \"$0; c++} c>28{exit}' dist/phaser.js)"
     ],
     "additionalDirectories": [
       "/tmp"

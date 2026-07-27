@@ -25,3 +25,7 @@ export const PROJECTION_DEPTH = 200_000_000
 export const CORNER_HANDLE_PX = 15
 /** Accent for the projection quad outline and handles (same blue as the grid). */
 export const CORNER_COLOR = 0x3b82f6
+/** Grab zone as a multiple of the drawn handle radius. At identity the handles sit
+ *  exactly on the canvas corners, so only a quarter of each is on-screen — the extra
+ *  slack keeps that sliver comfortably clickable. */
+export const CORNER_GRAB_FACTOR = 1.6
