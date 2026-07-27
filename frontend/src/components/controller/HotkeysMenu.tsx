@@ -13,6 +13,8 @@ const HOTKEYS = [
   { keys: ['Shift+]'], description: 'Bring to front' },
   { keys: ['Shift+['], description: 'Send to back' },
   { keys: ['Esc'], description: 'Deselect' },
+  { keys: ['↑↓←→'], description: 'Nudge projection corner' },
+  { keys: ['Shift+↑↓←→'], description: 'Nudge corner ×20' },
 ]
 
 interface Props {

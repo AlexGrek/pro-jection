@@ -17,3 +17,11 @@ export const GRID_COLOR = 0x3b82f6
 export const GRID_CELL = 120
 /** Depth of the grid overlay: above every layer, below the selection graphics. */
 export const GRID_DEPTH = 100_000_000
+
+/** Depth of the projection corner handles: above the grid, below the selection graphics. */
+export const PROJECTION_DEPTH = 200_000_000
+/** Target on-screen radius of a projection corner handle, in CSS pixels.
+ *  Scaled into canvas space at draw time so it stays grabbable at any canvas size. */
+export const CORNER_HANDLE_PX = 15
+/** Accent for the projection quad outline and handles (same blue as the grid). */
+export const CORNER_COLOR = 0x3b82f6

@@ -15,6 +15,7 @@ import type { VideoLayer } from './video'
 import type { BarcodeLayer } from './barcode'
 import type { RaysLayer } from './rays'
 import type { GridSettings } from './grid'
+import type { ProjectionSettings } from './projection'
 
 export * from './base'
 export * from './fonts'
@@ -27,15 +28,18 @@ export * from './video'
 export * from './barcode'
 export * from './rays'
 export * from './grid'
+export * from './projection'
 
 /** Union of all known layer types. Grows as new types are added. */
 export type Layer = TextLayer | ShapeLayer | FillLayer | IconLayer | ImageLayer | VideoLayer | BarcodeLayer | RaysLayer
 
-/** A full slide: an ordered list of layers plus an optional scene-wide grid overlay. */
+/** A full slide: an ordered list of layers plus optional scene-wide settings. */
 export interface Scene {
   objects: Layer[]
   /** Grid overlay drawn on top of every layer. Absent = off. */
   grid?: GridSettings
+  /** Keystone warp applied to the whole canvas. Absent = flat. */
+  projection?: ProjectionSettings
 }
 
 export const EMPTY_SCENE: Scene = { objects: [] }

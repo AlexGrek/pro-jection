@@ -27,7 +27,26 @@
       "Bash(npx vite *)",
       "Bash(npm info *)",
       "Bash(npx eslint *)",
-      "Bash(task ship *)"
+      "Bash(task ship *)",
+      "Bash(node -e \"const i=require\\('@tabler/icons-react'\\);['IconPerspective','IconPerspectiveOff','IconVector','IconBorderCorners','IconCrop','IconChevronUp','IconChevronDown','IconChevronLeft','IconChevronRight','IconRestore','IconFrustum'].forEach\\(n=>console.log\\(n, n in i\\)\\)\")",
+      "Bash(git stash *)",
+      "Bash(node -e ' *)",
+      "Bash(python3 -)",
+      "Bash(npx playwright *)",
+      "Bash(curl -sf http://localhost:5173/)",
+      "Bash(curl -sf http://localhost:8080/live)",
+      "Bash(curl -s http://localhost:8080/health)",
+      "Bash(node e2e.mjs)",
+      "Bash(npm init *)",
+      "Bash(npm i *)",
+      "Bash(sed -i '' \"s|await p.waitForTimeout\\(2500\\)|await p.waitForTimeout\\(2500\\); await p.getByTitle\\('3D projection'\\).waitFor\\({ state: 'attached' }\\); await p.waitForFunction\\(\\(\\) => { const b = [...document.querySelectorAll\\('button'\\)].find\\(b => b.title === '3D projection'\\); return b \\\\&\\\\& !b.disabled }, null, { timeout: 30000 }\\)|\" probe.mjs)",
+      "Bash(node probe.mjs)",
+      "Bash(curl -s -o /dev/null -w \"vite:%{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(curl -s -o /dev/null -w \"backend:%{http_code}\\\\n\" http://localhost:8080/live)",
+      "Bash(node probe2.mjs)",
+      "Bash(curl -s http://localhost:8080/)",
+      "Bash(sed -i '' 's|http://localhost:5173|http://localhost:8080|g' e2e.mjs probe.mjs)",
+      "Bash(sed -i '' \"s|ok\\(b1.pos === 'absolute' \\\\&\\\\& b1.origin === '0 0', 'canvas positioned by the scene \\(NO_CENTER path\\)'\\)|ok\\(b1.pos === 'absolute' \\\\&\\\\& b1.origin.startsWith\\('0px'\\), 'canvas positioned by the scene \\(NO_CENTER path\\)'\\)|\" e2e.mjs)"
     ],
     "additionalDirectories": [
       "/tmp"

@@ -1,9 +1,10 @@
 import Phaser from 'phaser'
-import type { GlowModifier, GridSettings, Layer, Modifier, Scene } from '@/lib/scene'
-import { getArrayModifier, getGlowModifier, getMatrixModifier } from '@/lib/scene'
+import type { GlowModifier, GridSettings, Layer, Modifier, ProjectionSettings, Scene } from '@/lib/scene'
+import { getArrayModifier, getGlowModifier, getMatrixModifier, isIdentityCorners, withCorner } from '@/lib/scene'
 import { GLOW_PERIOD_MAX, GLOW_PERIOD_MIN } from '@/lib/scene'
 import { hexToInt } from './colors'
-import { BARCODE_TEXTURE_PREFIX, CANVAS_H, CANVAS_W, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, GRID_DEPTH, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, RAYS_TEXTURE_PREFIX } from './constants'
+import { BARCODE_TEXTURE_PREFIX, CANVAS_H, CANVAS_W, CORNER_COLOR, CORNER_HANDLE_PX, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, GRID_DEPTH, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, PROJECTION_DEPTH, RAYS_TEXTURE_PREFIX } from './constants'
+import { cornersToMatrix3d } from './warp'
 import { applyText } from './renderers/text'
 import { applyShape } from './renderers/shape'
 import { applyFill } from './renderers/fill'
@@ -13,6 +14,7 @@ import { applyVideo, cleanupVideo } from './renderers/video'
 import { applyBarcode, cleanupBarcode } from './renderers/barcode'
 import { applyRays } from './renderers/rays'
 import { drawGrid } from './renderers/grid'
+import { drawCalibrationGrid } from './renderers/calibration'
 import type { InteractiveOpts, LayerObject, RenderCtx } from './renderers/types'
 
 export { type Layer, type Scene } from '@/lib/scene'
@@ -34,6 +36,9 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   onObjectSelect?: (id: string) => void
   onWheelResize?: (id: string, factor: number) => void
   onSceneReady?: (scene: ProjectionScene) => void
+  onCornerDrag?: (index: number, x: number, y: number) => void
+  onCornerDragEnd?: (index: number, x: number, y: number) => void
+  onCornerSelect?: (index: number) => void
 
   readonly gameObjects = new Map<string, LayerObject>()
   readonly layerData = new Map<string, Layer>()
@@ -45,6 +50,14 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   private _selectionGraphics?: Phaser.GameObjects.Graphics
   private _grid?: Phaser.GameObjects.Graphics
   private _gridSettings?: GridSettings
+
+  private _projection?: ProjectionSettings
+  /** Controller-local flat preview turns the warp off without clearing the corners. */
+  private _warpEnabled = true
+  private _selectedCorner: number | null = null
+  private _cornerOutline?: Phaser.GameObjects.Graphics
+  private _cornerHandles: Phaser.GameObjects.Arc[] = []
+  private _calibration?: Phaser.GameObjects.Graphics
 
   constructor() {
     super({ key: 'ProjectionScene' })
@@ -77,6 +90,14 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
         },
       )
     }
+
+    // The canvas is positioned and warped by us, not by autoCenter — see _layoutCanvas.
+    this.scale.on(Phaser.Scale.Events.RESIZE, this._layoutCanvas, this)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off(Phaser.Scale.Events.RESIZE, this._layoutCanvas, this)
+    })
+    this._layoutCanvas()
+
     this.onSceneReady?.(this)
   }
 
@@ -201,6 +222,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     })
 
     this._applyGrid(scene.grid)
+    this.applyProjection(scene.projection)
 
     if (this.hint) {
       this.hint.setVisible(scene.objects.length === 0)
@@ -212,7 +234,42 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   }
 
   getScene(): Scene {
-    return { objects: Array.from(this.layerData.values()), grid: this._gridSettings }
+    return {
+      objects: Array.from(this.layerData.values()),
+      grid: this._gridSettings,
+      projection: this._projection,
+    }
+  }
+
+  // ── Projection (keystone warp) ────────────────────────────────────────────
+
+  /**
+   * Set the scene-wide keystone warp. Called from `applyScene`, and directly by
+   * the controller while dragging/nudging a corner so a calibration tweak doesn't
+   * re-dispatch every layer.
+   */
+  applyProjection(projection?: ProjectionSettings): void {
+    this._projection = projection
+    this._drawCalibration()
+    this._layoutCanvas()
+  }
+
+  /** Controller-only: `false` previews the scene flat while keeping the corners. */
+  setWarpEnabled(enabled: boolean): void {
+    if (this._warpEnabled === enabled) return
+    this._warpEnabled = enabled
+    this._layoutCanvas() // also redraws the handles, which hide while warped
+  }
+
+  setSelectedCorner(index: number | null): void {
+    if (this._selectedCorner === index) return
+    this._selectedCorner = index
+    this._drawCorners()
+  }
+
+  /** The warp only matters when it is enabled, present, and not the identity quad. */
+  private get _warpActive(): boolean {
+    return this._warpEnabled && !!this._projection && !isIdentityCorners(this._projection.corners)
   }
 
   // ── Internals exposed for renderer modules (RenderCtx surface) ────────────
@@ -345,6 +402,165 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     }
     this._grid.setVisible(true)
     drawGrid(this._grid, grid.type)
+  }
+
+  /**
+   * Position the canvas element inside its container and apply the keystone warp.
+   *
+   * Phaser 4 has no quad-warp game object, so the warp is a CSS `matrix3d` on the
+   * canvas itself. That means we cannot use `autoCenter` (PhaserCanvas passes
+   * `NO_CENTER`): `ScaleManager.updateCenter` derives its margins from
+   * `canvas.getBoundingClientRect()`, which under a transform is the axis-aligned
+   * bounding box of the *warped* canvas — the margins would chase the transform.
+   * `parentSize`/`displaySize` are computed from the container and are immune.
+   */
+  private _layoutCanvas = (): void => {
+    const canvas = this.game.canvas
+    if (!canvas) return
+
+    const pw = this.scale.parentSize.width
+    const ph = this.scale.parentSize.height
+    const dw = this.scale.displaySize.width
+    const dh = this.scale.displaySize.height
+
+    // Same margins autoCenter would set, but derived from parentSize/displaySize
+    // instead of a bounding rect. Margins rather than absolute positioning so the
+    // canvas stays in normal flow and its container needs no `position`, which
+    // would otherwise lift it over the header popovers.
+    canvas.style.marginLeft = `${Math.floor((pw - dw) / 2)}px`
+    canvas.style.marginTop = `${Math.floor((ph - dh) / 2)}px`
+    canvas.style.transformOrigin = '0 0'
+
+    const transform = this._warpActive ? cornersToMatrix3d(this._projection!.corners, dw, dh) : 'none'
+    if (canvas.style.transform !== transform) canvas.style.transform = transform
+
+    // Phaser maps pointers through canvasBounds *and* displayScale, both derived
+    // from getBoundingClientRect — the transform invalidates them, so every
+    // drag/click would land in the wrong place. Turn input off while warped.
+    this.input.enabled = !this._warpActive
+    if (!this._warpActive) {
+      // Recompute both from the now-untransformed box. Not scale.refresh(): that
+      // re-emits RESIZE, which re-enters this method. displayScale is otherwise
+      // only written inside refresh(), so a value computed while warped would
+      // survive indefinitely and mis-scale every pointer event in flat mode.
+      this.scale.updateBounds()
+      const bounds = this.scale.canvasBounds
+      if (bounds.width > 0 && bounds.height > 0) {
+        this.scale.displayScale.set(
+          this.scale.baseSize.width / bounds.width,
+          this.scale.baseSize.height / bounds.height,
+        )
+      }
+    }
+
+    this._drawCorners()
+  }
+
+  /**
+   * Show the calibration grid whenever the scene is in projection edit mode. This
+   * runs on *every* client, projector included — the point is to see the warped
+   * grid land on the real surface while the corners are being tuned.
+   */
+  private _drawCalibration(): void {
+    if (!this._projection?.editing) {
+      this._calibration?.setVisible(false)
+      this._drawCorners()
+      return
+    }
+    if (!this._calibration) {
+      this._calibration = this.add.graphics().setDepth(PROJECTION_DEPTH - 1)
+    }
+    this._calibration.setVisible(true)
+    drawCalibrationGrid(this._calibration)
+    this._drawCorners()
+  }
+
+  /**
+   * Draw the projection quad outline and its four corner handles. The handles are
+   * held in `_cornerHandles` rather than `gameObjects` — that map is swept for
+   * stale ids at the top of `applyScene`, which would destroy them on every send.
+   */
+  private _drawCorners(): void {
+    // Handles are drawn in canvas space, so under the warp they would land at
+    // H(corner) rather than on the quad — what actually maps onto the quad is the
+    // canvas rect's own corners. In projected preview the warped image edge *is*
+    // the quad, so hide the overlay; input is disabled there anyway.
+    const show = this.editable && !!this._projection?.editing && !this._warpActive
+    if (!show) {
+      this._cornerOutline?.setVisible(false)
+      this._cornerHandles.forEach((h) => h.setVisible(false))
+      return
+    }
+
+    const pts = this._projection!.corners.map((c) => ({ x: c.x * CANVAS_W, y: c.y * CANVAS_H }))
+
+    // The canvas is scaled to fit its container, so a fixed canvas-space radius
+    // would shrink to a few CSS pixels on the mobile controller. Size from the
+    // current display scale instead so handles stay thumb-sized everywhere.
+    const scale = CANVAS_W / (this.scale.displaySize.width || CANVAS_W)
+    const radius = Phaser.Math.Clamp(CORNER_HANDLE_PX * scale, 16, 140)
+    const stroke = Phaser.Math.Clamp(2 * scale, 2, 12)
+
+    if (!this._cornerOutline) {
+      this._cornerOutline = this.add.graphics().setDepth(PROJECTION_DEPTH)
+    }
+    const g = this._cornerOutline
+    g.setVisible(true).clear()
+    g.lineStyle(stroke, CORNER_COLOR, 0.9)
+    g.strokePoints(pts.map((p) => new Phaser.Math.Vector2(p.x, p.y)), true)
+
+    if (this._cornerHandles.length === 0) this._createCornerHandles()
+
+    this._cornerHandles.forEach((handle, i) => {
+      const selected = i === this._selectedCorner
+      handle
+        .setVisible(true)
+        .setPosition(pts[i].x, pts[i].y)
+        .setStrokeStyle(selected ? stroke * 2 : stroke, 0xffffff, 1)
+        .setFillStyle(CORNER_COLOR, selected ? 1 : 0.55)
+      if (handle.radius !== radius) {
+        handle.setRadius(radius)
+        // setRadius resizes the object but not the hit area captured at
+        // setInteractive time — re-issue it so the grab zone tracks the handle.
+        handle.setInteractive({ draggable: true, cursor: 'move' })
+      }
+    })
+  }
+
+  private _createCornerHandles(): void {
+    for (let i = 0; i < 4; i++) {
+      const handle = this.add
+        .circle(0, 0, CORNER_HANDLE_PX, CORNER_COLOR, 0.55)
+        .setStrokeStyle(4, 0xffffff, 1)
+        .setDepth(PROJECTION_DEPTH + 1)
+        .setInteractive({ draggable: true, cursor: 'move' })
+
+      let lastSend = 0
+      handle.on('drag', (_p: Phaser.Input.Pointer, dragX: number, dragY: number) => {
+        if (!this._projection) return
+        // Clamped to the canvas box: `input.windowEvents` is off, so a pointerup
+        // outside the canvas never reaches Phaser and an escaping handle would get
+        // stuck mid-drag. Corners beyond the edge stay a keyboard-only affordance.
+        const x = Phaser.Math.Clamp(dragX / CANVAS_W, 0, 1)
+        const y = Phaser.Math.Clamp(dragY / CANVAS_H, 0, 1)
+        const next = withCorner(this._projection.corners, i, x, y)
+        if (!next) return // would fold the quad — ignore this frame
+        this._projection = { corners: next }
+        this._drawCorners() // immediate local feedback, independent of the round trip
+        const now = Date.now()
+        if (now - lastSend >= DRAG_SEND_INTERVAL_MS) {
+          lastSend = now
+          this.onCornerDrag?.(i, next[i].x, next[i].y)
+        }
+      })
+      handle.on('dragend', () => {
+        const c = this._projection?.corners[i]
+        if (c) this.onCornerDragEnd?.(i, c.x, c.y)
+      })
+      handle.on('pointerdown', () => this.onCornerSelect?.(i))
+
+      this._cornerHandles.push(handle)
+    }
   }
 
   /**

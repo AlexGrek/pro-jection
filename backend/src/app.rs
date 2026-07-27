@@ -19,8 +19,12 @@ pub fn create_app(state: Arc<AppState>) -> Router {
     let assets_dir = format!("{}/assets", &static_dir);
 
     // Everything else falls back to index.html for client-side React Router.
+    // `fallback` rather than `not_found_service`: the latter wraps the file in
+    // `SetStatus(404)`, so every deep link (/controller/…, /projector/…) was served
+    // with a 404 status even though the app rendered fine — which breaks caches,
+    // uptime checks, and litters the console with resource errors.
     let spa_fallback = ServeDir::new(&static_dir)
-        .not_found_service(ServeFile::new(format!("{}/index.html", &static_dir)));
+        .fallback(ServeFile::new(format!("{}/index.html", &static_dir)));
 
     let mut allowed_origins: Vec<HeaderValue> = vec![
         "http://localhost:5173".parse().unwrap(),

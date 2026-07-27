@@ -26,6 +26,7 @@ import { GlowModifierPanel } from '@/components/controller/GlowModifierPanel'
 import { MatrixModifierPanel } from '@/components/controller/MatrixModifierPanel'
 import { FillProperties } from '@/components/controller/FillProperties'
 import { GridControl } from '@/components/controller/GridControl'
+import { ProjectionControl } from '@/components/controller/ProjectionControl'
 import { IconProperties } from '@/components/controller/IconProperties'
 import { ImageProperties } from '@/components/controller/ImageProperties'
 import { HotkeysMenu } from '@/components/controller/HotkeysMenu'
@@ -52,6 +53,8 @@ import {
   DEFAULT_TEXT_LAYER,
   DEFAULT_VIDEO_LAYER,
   randomBarcodeValue,
+  withCorner,
+  type ProjectionSettings,
   type FillLayer,
   type IconLayer,
   type ImageLayer,
@@ -64,6 +67,7 @@ import {
   type TextLayer,
   type VideoLayer,
 } from '@/lib/scene'
+import { CANVAS_H, CANVAS_W } from '@/lib/phaser/constants'
 
 type ConnState = 'connecting' | 'connected' | 'disconnected' | 'error'
 
@@ -74,6 +78,10 @@ type ServerEvent =
 
 
 const TEXT_DEBOUNCE_MS = 350
+
+/** Arrow-key nudge of a projection corner, in canvas pixels. Shift uses the big step. */
+const CORNER_NUDGE_SMALL = 1
+const CORNER_NUDGE_BIG = 20
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
@@ -165,7 +173,14 @@ export function ControllerPage() {
 
   const [objects, setObjects] = useState<Layer[]>([])
   const [grid, setGrid] = useState<GridSettings | null>(null)
+  const [projection, setProjection] = useState<ProjectionSettings | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  // Controller-local projection view state, deliberately not part of the Scene: the
+  // projector always renders projected, and which corner the arrows move is our
+  // business alone. Edit mode itself *is* on the Scene — see projection.editing.
+  const [warpPreview, setWarpPreview] = useState(false)
+  const [selectedCorner, setSelectedCorner] = useState<number | null>(null)
   const [justAddedTextId, setJustAddedTextId] = useState<string | null>(null)
   const [hotkeysOpen, setHotkeysOpen] = useState(false)
 
@@ -176,6 +191,10 @@ export function ControllerPage() {
   useEffect(() => { objectsRef.current = objects }, [objects])
   const gridRef = useRef<GridSettings | null>(grid)
   useEffect(() => { gridRef.current = grid }, [grid])
+  const projectionRef = useRef<ProjectionSettings | null>(projection)
+  useEffect(() => { projectionRef.current = projection }, [projection])
+  const selectedCornerRef = useRef<number | null>(selectedCorner)
+  useEffect(() => { selectedCornerRef.current = selectedCorner }, [selectedCorner])
   const selectedIdRef = useRef<string | null>(null)
   useEffect(() => { selectedIdRef.current = selectedId }, [selectedId])
 
@@ -198,11 +217,16 @@ export function ControllerPage() {
   const resizeAddW    = useCallback((d: number) => setAddW(w    => Math.max(120, Math.min(400, w - d))), [])
 
   // ── Local sync: state + canvas ────────────────────────────────────────────
-  // The grid overlay is scene-wide, not a layer — it rides along on every apply
-  // and send via gridRef so the objects-centric helpers stay unchanged.
+  // The grid overlay and the projection warp are scene-wide, not layers — they ride
+  // along on every apply and send via their refs so the objects-centric helpers stay
+  // unchanged.
   const applyObjects = useCallback((next: Layer[]) => {
     setObjects(next)
-    canvasRef.current?.applyScene({ objects: next, grid: gridRef.current ?? undefined })
+    canvasRef.current?.applyScene({
+      objects: next,
+      grid: gridRef.current ?? undefined,
+      projection: projectionRef.current ?? undefined,
+    })
   }, [])
 
   // ── Send ──────────────────────────────────────────────────────────────────
@@ -212,7 +236,11 @@ export function ControllerPage() {
       clearTimeout(debounceRef.current)
       debounceRef.current = null
     }
-    wsRef.current.send(JSON.stringify({ objects: next, grid: gridRef.current ?? undefined } satisfies Scene))
+    wsRef.current.send(JSON.stringify({
+      objects: next,
+      grid: gridRef.current ?? undefined,
+      projection: projectionRef.current ?? undefined,
+    } satisfies Scene))
   }, [])
 
   const sendDebounced = useCallback((next: Layer[]) => {
@@ -248,6 +276,8 @@ export function ControllerPage() {
         const scene = data as Scene
         gridRef.current = scene.grid ?? null
         setGrid(scene.grid ?? null)
+        projectionRef.current = scene.projection ?? null
+        setProjection(scene.projection ?? null)
         applyObjects(scene.objects)
       }
     }
@@ -288,9 +318,61 @@ export function ControllerPage() {
   const changeGrid = useCallback((next: GridSettings | null) => {
     gridRef.current = next
     setGrid(next)
-    canvasRef.current?.applyScene({ objects: objectsRef.current, grid: next ?? undefined })
+    canvasRef.current?.applyScene({
+      objects: objectsRef.current,
+      grid: next ?? undefined,
+      projection: projectionRef.current ?? undefined,
+    })
     sendNow(objectsRef.current)
   }, [sendNow])
+
+  // ── Projection (keystone warp) ────────────────────────────────────────────
+  // Corner tweaks go straight to the canvas via setProjection rather than a full
+  // applyScene, so nudging a corner doesn't re-dispatch every layer.
+  const changeProjection = useCallback((next: ProjectionSettings | null, immediate = true) => {
+    projectionRef.current = next
+    setProjection(next)
+    canvasRef.current?.setProjection(next ?? undefined)
+    if (immediate) sendNow(objectsRef.current)
+    else sendDebounced(objectsRef.current)
+  }, [sendNow, sendDebounced])
+
+  /** Move one corner. `immediate` = the gesture ended; otherwise the send is debounced. */
+  const moveCorner = useCallback((index: number, x: number, y: number, immediate: boolean) => {
+    const current = projectionRef.current
+    if (!current) return
+    const corners = withCorner(current.corners, index, x, y)
+    if (!corners) return // would fold the quad into a singular warp — no-op
+    changeProjection({ ...current, corners }, immediate)
+  }, [changeProjection])
+
+  /** Calibration mode rides on the scene so every projector shows the alignment grid. */
+  const setCornerEditing = useCallback((editing: boolean) => {
+    const current = projectionRef.current
+    if (!current) return
+    changeProjection({ ...current, editing })
+    if (editing && selectedCornerRef.current === null) setSelectedCorner(0)
+  }, [changeProjection])
+
+  // The scene moves the handle and redraws itself, and already throttles these to
+  // DRAG_SEND_INTERVAL_MS — so send straight away rather than debouncing, exactly
+  // as layer drags do.
+  const onCornerDrag = useCallback((i: number, x: number, y: number) => {
+    moveCorner(i, x, y, true)
+  }, [moveCorner])
+
+  const onCornerDragEnd = useCallback((i: number, x: number, y: number) => {
+    moveCorner(i, x, y, true)
+  }, [moveCorner])
+
+  /** Nudge pad in the popover — the mobile controller has no arrow keys. */
+  const nudgeSelectedCorner = useCallback((dxPx: number, dyPx: number) => {
+    const ci = selectedCornerRef.current ?? 0
+    const current = projectionRef.current
+    if (!current) return
+    const c = current.corners[ci]
+    moveCorner(ci, c.x + dxPx / CANVAS_W, c.y + dyPx / CANVAS_H, true)
+  }, [moveCorner])
 
   // ── Layer mutation ────────────────────────────────────────────────────────
   const patchSelected = useCallback((patch: Record<string, unknown>): Layer[] => {
@@ -338,6 +420,35 @@ export function ControllerPage() {
     const handler = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
       if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return
+
+      // Corner-edit mode is modal: arrows nudge the selected corner, Tab cycles
+      // corners and Esc drops the selection, all before the layer shortcuts.
+      if (projectionRef.current?.editing) {
+        const ci = selectedCornerRef.current
+        if (e.key.startsWith('Arrow') && ci !== null) {
+          e.preventDefault()
+          const step = e.shiftKey ? CORNER_NUDGE_BIG : CORNER_NUDGE_SMALL
+          const c = projectionRef.current.corners[ci]
+          // Step in canvas pixels so the nudge is square on screen — x and y have
+          // different divisors because the canvas is 1920×1080.
+          const dx = (e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0) / CANVAS_W
+          const dy = (e.key === 'ArrowDown' ? step : e.key === 'ArrowUp' ? -step : 0) / CANVAS_H
+          // Debounced while the key repeats; the keyup handler flushes the final value.
+          moveCorner(ci, c.x + dx, c.y + dy, false)
+          return
+        }
+        if (e.key === 'Tab') {
+          e.preventDefault()
+          const dir = e.shiftKey ? -1 : 1
+          setSelectedCorner(ci === null ? (dir === 1 ? 0 : 3) : (ci + dir + 4) % 4)
+          return
+        }
+        if (e.key === 'Escape' && ci !== null) {
+          setSelectedCorner(null)
+          return
+        }
+      }
+
       const sid = selectedIdRef.current
       const isMod = e.metaKey || e.ctrlKey
       if ((e.key === 'Delete' || e.key === 'Backspace') && sid) {
@@ -373,9 +484,20 @@ export function ControllerPage() {
         canvasRef.current?.selectObject(null)
       }
     }
+    // Arrow nudges stream debounced sends while the key repeats — flush the final
+    // corner position on release, like the sliders' onKeyUp commit.
+    const keyup = (e: KeyboardEvent) => {
+      if (e.key.startsWith('Arrow') && projectionRef.current?.editing) {
+        sendCurrent()
+      }
+    }
     window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [deleteLayer, duplicateLayer, moveLayer])
+    window.addEventListener('keyup', keyup)
+    return () => {
+      window.removeEventListener('keydown', handler)
+      window.removeEventListener('keyup', keyup)
+    }
+  }, [deleteLayer, duplicateLayer, moveLayer, moveCorner, sendCurrent])
 
   const selectLayer = (id: string) => {
     setSelectedId(id)
@@ -445,7 +567,7 @@ export function ControllerPage() {
     const resp = await fetch('/api/scenes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, scene: { objects: objs, grid: gridRef.current ?? undefined }, artifacts: collectArtifacts(objs) }),
+      body: JSON.stringify({ name, scene: { objects: objs, grid: gridRef.current ?? undefined, projection: projectionRef.current ?? undefined }, artifacts: collectArtifacts(objs) }),
     })
     if (!resp.ok) return
     const meta = (await resp.json()) as SavedSceneMeta
@@ -463,7 +585,7 @@ export function ControllerPage() {
     const resp = await fetch(`/api/scenes/${currentSceneId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: currentSceneName, scene: { objects: objs, grid: gridRef.current ?? undefined }, artifacts: collectArtifacts(objs) }),
+      body: JSON.stringify({ name: currentSceneName, scene: { objects: objs, grid: gridRef.current ?? undefined, projection: projectionRef.current ?? undefined }, artifacts: collectArtifacts(objs) }),
     })
     if (resp.status === 404) {
       // Scene expired or was deleted server-side — fall back to creating a fresh one.
@@ -487,6 +609,8 @@ export function ControllerPage() {
     const objs = data.scene.objects ?? []
     gridRef.current = data.scene.grid ?? null
     setGrid(data.scene.grid ?? null)
+    projectionRef.current = data.scene.projection ?? null
+    setProjection(data.scene.projection ?? null)
     applyObjects(objs)
     sendNow(objs)
     setSelectedId(null)
@@ -716,6 +840,18 @@ export function ControllerPage() {
               <IconCopy size={15} stroke={1.5} />
             </Button>
             <GridControl grid={grid} onChange={changeGrid} disabled={connState !== 'connected'} />
+            <ProjectionControl
+              projection={projection}
+              onChange={changeProjection}
+              warpPreview={warpPreview}
+              onWarpPreviewChange={setWarpPreview}
+              onNudge={nudgeSelectedCorner}
+              cornerEditing={!!projection?.editing}
+              onCornerEditingChange={setCornerEditing}
+              selectedCorner={selectedCorner}
+              onSelectCorner={setSelectedCorner}
+              disabled={connState !== 'connected'}
+            />
             <Button
               variant="ghost"
               size="sm"
@@ -751,7 +887,7 @@ export function ControllerPage() {
         {disconnectBanner}
 
         {/* Canvas — 16:9 full width, capped so landscape doesn't eat the whole screen */}
-        <div className="w-full aspect-video max-h-[45vh] bg-black shrink-0">
+        <div className="w-full aspect-video max-h-[45vh] bg-black shrink-0 overflow-hidden">
           <PhaserCanvas
             ref={canvasRef}
             editable
@@ -759,6 +895,11 @@ export function ControllerPage() {
             onDragMove={onDragMove}
             onObjectSelect={onObjectSelect}
             onWheelResize={onWheelResize}
+            warpEnabled={warpPreview}
+            selectedCorner={selectedCorner}
+            onCornerDrag={onCornerDrag}
+            onCornerDragEnd={onCornerDragEnd}
+            onCornerSelect={setSelectedCorner}
             className="w-full h-full"
           />
         </div>
@@ -861,6 +1002,18 @@ export function ControllerPage() {
             Save As
           </Button>
           <GridControl grid={grid} onChange={changeGrid} disabled={connState !== 'connected'} />
+          <ProjectionControl
+            projection={projection}
+            onChange={changeProjection}
+            warpPreview={warpPreview}
+            onWarpPreviewChange={setWarpPreview}
+            onNudge={nudgeSelectedCorner}
+            cornerEditing={!!projection?.editing}
+            onCornerEditingChange={setCornerEditing}
+            selectedCorner={selectedCorner}
+            onSelectCorner={setSelectedCorner}
+            disabled={connState !== 'connected'}
+          />
           <Button
             variant="ghost"
             size="sm"
@@ -917,6 +1070,11 @@ export function ControllerPage() {
               onDragMove={onDragMove}
               onObjectSelect={onObjectSelect}
               onWheelResize={onWheelResize}
+              warpEnabled={warpPreview}
+                selectedCorner={selectedCorner}
+              onCornerDrag={onCornerDrag}
+              onCornerDragEnd={onCornerDragEnd}
+              onCornerSelect={setSelectedCorner}
               className="w-full h-full"
             />
           </div>
