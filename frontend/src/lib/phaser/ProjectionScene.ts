@@ -4,7 +4,7 @@ import { calibrationHex, getArrayModifier, getGlowModifier, getMatrixModifier, i
 import { GLOW_PERIOD_MAX, GLOW_PERIOD_MIN } from '@/lib/scene'
 import { hexToInt } from './colors'
 import { BARCODE_TEXTURE_PREFIX, CANVAS_H, CANVAS_W, CORNER_COLOR, CORNER_GRAB_FACTOR, CORNER_HANDLE_PX, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, GRID_DEPTH, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, PROJECTION_DEPTH, RAYS_TEXTURE_PREFIX } from './constants'
-import { cornersToMatrix3d } from './warp'
+import { cornersToMatrix3d, projectUnit, squareToQuad } from './warp'
 import { applyText } from './renderers/text'
 import { applyShape } from './renderers/shape'
 import { applyFill } from './renderers/fill'
@@ -14,7 +14,7 @@ import { applyVideo, cleanupVideo } from './renderers/video'
 import { applyBarcode, cleanupBarcode } from './renderers/barcode'
 import { applyRays } from './renderers/rays'
 import { drawGrid } from './renderers/grid'
-import { drawCalibrationGrid } from './renderers/calibration'
+import { drawCalibrationGrid, identityProject, type Project } from './renderers/calibration'
 import type { InteractiveOpts, LayerObject, RenderCtx } from './renderers/types'
 
 export { type Layer, type Scene } from '@/lib/scene'
@@ -109,7 +109,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   private _updateSelection() {
     if (!this._selectionGraphics) return
     this._selectionGraphics.clear()
-    if (!this.selectedId) return
+    if (!this.selectedId || this._hideLayers) return
 
     const layer = this.layerData.get(this.selectedId)
     // fills and fullscreen rays span the whole canvas — panel highlight is the indicator
@@ -222,11 +222,8 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     })
 
     this._applyGrid(scene.grid)
+    // Also settles layer/grid/hint visibility, which calibration mode overrides.
     this.applyProjection(scene.projection)
-
-    if (this.hint) {
-      this.hint.setVisible(scene.objects.length === 0)
-    }
   }
 
   selectObject(id: string | null) {
@@ -251,6 +248,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   applyProjection(projection?: ProjectionSettings): void {
     this._projection = projection
     this._drawCalibration()
+    this._applyLayerVisibility()
     this._layoutCanvas()
   }
 
@@ -470,9 +468,39 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     if (!this._calibration) {
       this._calibration = this.add.graphics().setDepth(PROJECTION_DEPTH - 1)
     }
+
+    // When the canvas itself carries the CSS warp (projector, or the controller's
+    // projected preview) the grid must be drawn square and let the transform bend
+    // it. In flat preview there is no transform, so bend the geometry instead —
+    // otherwise the grid sits square and full-bleed and tells you nothing about
+    // where the quad actually is.
+    const H = this._warpActive ? null : squareToQuad(this._projection.corners, CANVAS_W, CANVAS_H)
+    const project: Project = H ? (u, v) => projectUnit(H, u, v) : identityProject
+
     this._calibration.setVisible(true)
-    drawCalibrationGrid(this._calibration, hexToInt(calibrationHex(this._projection.color)))
+    drawCalibrationGrid(
+      this._calibration,
+      hexToInt(calibrationHex(this._projection.color)),
+      project,
+    )
     this._drawCorners()
+  }
+
+  /**
+   * Calibration is a full-screen alignment view on the controller: scene content is
+   * hidden so only the grid and its handles remain, and there is nothing to mistake
+   * for a misaligned edge. The projector keeps showing the content — it is the live
+   * output, and the grid is drawn over it.
+   */
+  private get _hideLayers(): boolean {
+    return this.editable && !!this._projection?.editing
+  }
+
+  private _applyLayerVisibility(): void {
+    const hidden = this._hideLayers
+    for (const go of this.gameObjects.values()) go.setVisible(!hidden)
+    this._grid?.setVisible(!hidden && !!this._gridSettings)
+    this.hint?.setVisible(!hidden && this.gameObjects.size === 0)
   }
 
   /**

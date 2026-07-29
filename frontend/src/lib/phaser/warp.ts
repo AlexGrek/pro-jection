@@ -27,8 +27,29 @@ const fmt = (v: number): string => v.toFixed(12).replace(/(\.\d*?)0+$/, '$1').re
 /** Tolerance for the near-degenerate tests below, in canvas pixels. */
 const EPS = 1e-9
 
-export function cornersToMatrix3d(corners: Corners, w: number, h: number): string {
-  if (w <= 0 || h <= 0) return 'none'
+/**
+ * Projective map from the unit square onto the quad, with the target expressed in
+ * `w` × `h` pixels. `(u,v)` in 0–1 maps to `((a·u + b·v + c)/w', (d·u + e·v + f)/w')`
+ * where `w' = g·u + k·v + 1`.
+ */
+export interface Homography {
+  a: number; b: number; c: number
+  d: number; e: number; f: number
+  g: number; k: number
+}
+
+/** Map a unit-square point through the homography. Returns pixel coordinates. */
+export function projectUnit(H: Homography, u: number, v: number): { x: number; y: number } {
+  const w = H.g * u + H.k * v + 1
+  return { x: (H.a * u + H.b * v + H.c) / w, y: (H.d * u + H.e * v + H.f) / w }
+}
+
+/**
+ * Solve the square-to-quad homography. Returns null when the quad is degenerate —
+ * collapsed, or with a corner behind the projection plane.
+ */
+export function squareToQuad(corners: Corners, w: number, h: number): Homography | null {
+  if (w <= 0 || h <= 0) return null
 
   const [p0, p1, p2, p3] = corners
   const x0 = p0.x * w, y0 = p0.y * h
@@ -51,7 +72,7 @@ export function cornersToMatrix3d(corners: Corners, w: number, h: number): strin
     g = 0; k = 0
   } else {
     const den = dx1 * dy2 - dy1 * dx2
-    if (Math.abs(den) < EPS) return 'none'
+    if (Math.abs(den) < EPS) return null
     g = (dx3 * dy2 - dy3 * dx2) / den
     k = (dx1 * dy3 - dy1 * dx3) / den
     a = x1 - x0 + g * x1
@@ -63,13 +84,27 @@ export function cornersToMatrix3d(corners: Corners, w: number, h: number): strin
   // The homogeneous divisor at the four source corners is 1, 1+g, 1+g+k, 1+k.
   // If any is non-positive that corner sits behind the projection plane and the
   // browser clips — or drops — the element even though the matrix is finite.
-  if (1 + g <= EPS || 1 + k <= EPS || 1 + g + k <= EPS) return 'none'
+  if (1 + g <= EPS || 1 + k <= EPS || 1 + g + k <= EPS) return null
+
+  const H = { a, b, c, d, e, f, g, k }
+  return Object.values(H).every(Number.isFinite) ? H : null
+}
+
+/**
+ * CSS `matrix3d(…)` mapping the canvas box (`w` × `h` CSS px, origin top-left)
+ * onto the quad described by `corners` (normalised 0–1 canvas coordinates).
+ *
+ * The element must carry `transform-origin: 0 0`. Returns `'none'` for a
+ * degenerate quad so the caller can just assign the result unconditionally.
+ */
+export function cornersToMatrix3d(corners: Corners, w: number, h: number): string {
+  const H = squareToQuad(corners, w, h)
+  if (!H) return 'none'
 
   // Compose with diag(1/w, 1/h, 1) so the source is the canvas box in px rather
   // than the unit square.
-  const m = [a / w, b / h, c, d / w, e / h, f, g / w, k / h]
-  if (m.some((v) => !Number.isFinite(v))) return 'none'
-  const [A, B, C, D, E, F, G, K] = m.map(fmt)
+  const [A, B, C, D, E, F, G, K] = [H.a / w, H.b / h, H.c, H.d / w, H.e / h, H.f, H.g / w, H.k / h]
+    .map(fmt)
 
   // matrix3d is column-major: x-column, y-column, z-column, translation.
   // The 4th component of the x/y columns carries the perspective divisor.
