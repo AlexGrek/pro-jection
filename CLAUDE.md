@@ -42,7 +42,7 @@ Read [session.rs](backend/src/session.rs) for `SessionState`'s fields and its `p
 
 ### Controller architecture
 
-Type-specific UI lives under [components/controller/](frontend/src/components/controller/). Property panels take `{ layer, controls }` where `controls: PropertyControls` bundles mutation/send helpers — check [types.ts](frontend/src/components/controller/types.ts) for the contract. One file per layer kind (`TextProperties`, `ShapeProperties`, `FillProperties`, `IconProperties`, `ImageProperties`, `VideoProperties`, `BarcodeProperties`, `RaysProperties`, `GrainProperties`, `CodeProperties`, `ConcentricProperties`, `LinesProperties`), plus per-modifier/animation panels (`ArrayModifierPanel`, `GlowModifierPanel`, `MatrixModifierPanel`, `GlowAnimationPanel`), picker modals (`FontPickerModal`, `IconPickerModal`), `SceneStorageDialogs` (save/load/export/import UI), `HotkeysMenu`, `LayerRow`, `AddObjectPanel`, `GridControl`, `ProjectionControl`, `PropertyRow`, `ColorPicker`. Open the specific file for its exact props/behavior rather than assuming from the name.
+Type-specific UI lives under [components/controller/](frontend/src/components/controller/). Property panels take `{ layer, controls }` where `controls: PropertyControls` bundles mutation/send helpers — check [types.ts](frontend/src/components/controller/types.ts) for the contract. One file per layer kind (`TextProperties`, `ShapeProperties`, `FillProperties`, `IconProperties`, `ImageProperties`, `VideoProperties`, `BarcodeProperties`, `RaysProperties`, `GrainProperties`, `CodeProperties`, `ConcentricProperties`, `LinesProperties`), plus per-modifier/animation panels (`ArrayModifierPanel`, `GlowModifierPanel`, `MatrixModifierPanel`, `GlowAnimationPanel`), picker modals (`FontPickerModal`, `IconPickerModal`), `SceneStorageDialogs` (save/load/export/import UI), `HotkeysMenu`, `LayerRow`, `AddObjectPanel`, `GridControl`, `ProjectionControl`, `EffectsControl` (post-processing chain — see [effects.md](effects.md)), `PropertyRow`, `ColorPicker`. Open the specific file for its exact props/behavior rather than assuming from the name.
 
 Send timing is a deliberate contract, not per-component discretion — check a component against this table before changing its send behavior:
 
@@ -56,6 +56,8 @@ Send timing is a deliberate contract, not per-component discretion — check a c
 | Projection corner drag | throttled `sendNow` (500 ms) + `sendNow` on drag-end |
 | Projection corner arrow-key nudge | `sendDebounced` (350 ms) per repeat, `sendNow` on key-up |
 | Color picker | `sendDebounced` while tuning via `onChange(hex)`; `sendNow` on commit via `onCommit(hex)` — see the last Conventions bullet for why commit can't use `sendCurrent` |
+| Post-processing add / remove / reorder / enable / preset | `sendNow` immediate |
+| Post-processing slider | local preview only (`SendMode` `'none'`), `sendCurrent` on `onPointerUp` / `onKeyUp` |
 
 The layers panel renders in **reverse** array order (top-of-panel = front-of-stack). `moveLayer(from, to)` operates on real array indices.
 
@@ -63,7 +65,7 @@ The layers panel renders in **reverse** array order (top-of-panel = front-of-sta
 
 Canonical types live under [frontend/src/lib/scene/](frontend/src/lib/scene/), one file per layer kind, re-exported from [index.ts](frontend/src/lib/scene/index.ts) — **check that file for the current `Layer` union**, it grows independently of this doc. JSON wire format is snake_case to match Rust conventions; the backend never inspects layer content. Layer kinds as of writing: text, shape (rect/circle), fill (solid/gradient), icon, image, video, barcode, rays, grain, code, concentric, lines — but verify against `index.ts` rather than this list.
 
-`base.ts` defines `BaseLayer` (`id`, `x`/`y` 0–1, `opacity`, `animations`, `modifiers`) plus the `Animations`/`Modifier` union (glow animation; array/glow/matrix modifiers) — check it for exact fields, they carry non-obvious ranges/units in doc comments. `grid.ts` and `projection.ts` hold the two scene-wide (non-layer) settings that ride along on every send: grid overlay and keystone-warp projection; absent means off for both.
+`base.ts` defines `BaseLayer` (`id`, `x`/`y` 0–1, `opacity`, `animations`, `modifiers`) plus the `Animations`/`Modifier` union (glow animation; array/glow/matrix modifiers) — check it for exact fields, they carry non-obvious ranges/units in doc comments. `grid.ts`, `projection.ts` and `effects.ts` hold the three scene-wide (non-layer) settings that ride along on every send: grid overlay, keystone-warp projection, and the post-processing chain; absent means off for all three. See [effects.md](effects.md) for the effect union and how it maps onto Phaser camera filters.
 
 Adding a new layer type: add a file under `lib/scene/`, extend the `Layer` union in `index.ts`, add a renderer under `lib/phaser/renderers/`, add a Properties component under `components/controller/`. See [images.md](images.md) for a worked example.
 
@@ -75,6 +77,7 @@ Core files — read them directly, their doc comments carry the non-obvious reas
 - [lib/phaser/renderers/](frontend/src/lib/phaser/renderers/) — one file per layer kind (`text`, `shape`, `fill`, `icon`, `image`, `video`, `barcode`, `rays`, `grain`, `code`, `concentric`, `lines`) plus `grid.ts`/`calibration.ts` for the two overlay grids, dispatched outside the per-layer loop.
 - [warp.ts](frontend/src/lib/phaser/warp.ts) — pure homography math for the keystone `matrix3d`. Read its header comment before touching corner/projection logic; it explains why the warp is CSS-only (Phaser 4 has no Mesh/Plane) and the pointer-mapping consequences.
 - [PhaserCanvas.tsx](frontend/src/components/PhaserCanvas.tsx) — `forwardRef` wrapper; handle is `applyScene`/`selectObject`/`getScene`, buffers calls before the game is ready.
+- [postfx.ts](frontend/src/lib/phaser/postfx.ts) — maps `Scene.effects` onto the main camera's internal filter list, reconciling in place so a slider drag doesn't rebuild GPU resources. See [effects.md](effects.md).
 - [constants.ts](frontend/src/lib/phaser/constants.ts) — selection styling and other shared constants.
 - Fonts: `@fontsource*` packages imported in [index.css](frontend/src/index.css); catalogue in [scene/fonts.ts](frontend/src/lib/scene/fonts.ts).
 
@@ -114,6 +117,7 @@ Check [Taskfile.yml](Taskfile.yml) for the full list and exact behavior before a
 - The projector page auto-reconnects; the controller page does not (manual reconnect button only, to surface the "already connected" error clearly).
 - Phaser game instances are owned by `PhaserCanvas` and destroyed on unmount. Never call `game.destroy()` from outside the component — go through `PhaserCanvasHandle`.
 - Don't add Phaser audio or physics. Extend layer kinds via a new file under `lib/scene/` plus a matching renderer under `lib/phaser/renderers/`, not by reaching into existing renderers.
+- Post-processing (`Scene.effects`) is scene-wide and renders on **every** client, so the controller preview matches the projector. It is deliberately bypassed while `projection.editing` is on — see [effects.md](effects.md) before changing that.
 - The projector always renders the live projection; the controller's Flat/Projected switch is a **local preview only**, never serialised into the scene. Calibration mode (`projection.editing`) *is* on the scene — every client draws the warped alignment grid while it's on. See [projection.ts](frontend/src/lib/scene/projection.ts) and `ProjectionControl.tsx` before changing calibration behavior.
 - Corner edits go through `withCorner`/`isValidCorners` ([scene/projection.ts](frontend/src/lib/scene/projection.ts)), which reject a fold — a non-convex quad makes the homography singular and clips the canvas away entirely.
 - Auto-send is the contract: never reintroduce a Send button. Mutations always go `patch → applyObjects → sendNow/sendDebounced/sendCurrent`. The colour picker's commit path sends the freshly-patched array directly (`sendNow(patch(...))`) rather than `sendCurrent`, because `objectsRef` lags a render — check `ColorPicker.tsx` usage sites if touching this.

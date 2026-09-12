@@ -1,18 +1,24 @@
 import { useState } from 'react'
 import {
+  IconAlignJustified,
   IconAperture,
   IconBlur,
+  IconBoxMultiple,
   IconChevronDown,
   IconChevronUp,
   IconColorFilter,
+  IconColorSwatch,
   IconContrast,
   IconEyeglass,
   IconFlare,
-  IconFocus2,
+  IconDice5,
   IconGrid4x4,
   IconLayersDifference,
+  IconRainbow,
+  IconRipple,
   IconPalette,
   IconPlus,
+  IconTexture,
   IconTrash,
   IconWand,
   IconX,
@@ -23,12 +29,18 @@ import {
   DUOTONE_MAX_COLORS,
   EFFECT_MAX,
   EFFECT_TYPES,
+  PALETTES,
+  SCANLINE_MODES,
   createEffect,
   effectLabel,
+  randomNoiseSeed,
+  randomWarpSeed,
   effectSummary,
   type ColorGradePreset,
   type Effect,
   type EffectType,
+  type PalettePreset,
+  type ScanlineMode,
 } from '@/lib/scene'
 import { ColorPicker } from './ColorPicker'
 import type { SendMode } from './types'
@@ -46,9 +58,14 @@ const EFFECT_ICONS: Record<EffectType, typeof IconWand> = {
   color: IconPalette,
   bloom: IconFlare,
   blur: IconBlur,
-  tilt_shift: IconFocus2,
+  warp: IconRipple,
   pixelate: IconGrid4x4,
+  blocky: IconBoxMultiple,
   posterize: IconLayersDifference,
+  palette: IconColorSwatch,
+  scanlines: IconAlignJustified,
+  chroma: IconRainbow,
+  noise: IconTexture,
   threshold: IconContrast,
   duotone: IconColorFilter,
   vignette: IconAperture,
@@ -303,19 +320,24 @@ function EffectParams({ effect, set, commit }: ParamProps) {
         </>
       )
 
-    case 'tilt_shift':
+    case 'warp':
       return (
         <>
-          <Slider label="Radius" value={effect.radius} min={0} max={2} step={0.05}
-            onInput={(v) => set({ radius: v }, 'none')} commit={commit} />
-          <Slider label="Falloff" value={effect.falloff} min={0.2} max={4} step={0.05}
-            onInput={(v) => set({ falloff: v }, 'none')} commit={commit} />
-          <Slider label="Angle" value={effect.angle} min={0} max={180} step={1} unit="°" decimals={0}
-            onInput={(v) => set({ angle: v }, 'none')} commit={commit} />
-          <Slider label="Bloom" value={effect.amount} min={0} max={4} step={0.05}
+          <Slider label="Amount" value={effect.amount} min={0} max={0.3} step={0.005}
             onInput={(v) => set({ amount: v }, 'none')} commit={commit} />
-          <Slider label="Contrast" value={effect.contrast} min={0} max={1} step={0.02}
-            onInput={(v) => set({ contrast: v }, 'none')} commit={commit} />
+          <Slider label="Scale" value={effect.scale} min={2} max={32} step={1} decimals={0}
+            onInput={(v) => set({ scale: v }, 'none')} commit={commit} />
+          <Row label="Seed">
+            <span className="text-slate-500 text-[10px] font-mono flex-1 truncate">{effect.seed}</span>
+            <button
+              onClick={() => set({ seed: randomWarpSeed() })}
+              title="Shuffle the noise field"
+              className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-light text-slate-400 hover:text-white hover:bg-slate-800"
+            >
+              <IconDice5 size={12} stroke={1.5} />
+              Shuffle
+            </button>
+          </Row>
         </>
       )
 
@@ -323,6 +345,102 @@ function EffectParams({ effect, set, commit }: ParamProps) {
       return (
         <Slider label="Block" value={effect.amount} min={1} max={48} step={1} unit="px" decimals={0}
           onInput={(v) => set({ amount: v }, 'none')} commit={commit} />
+      )
+
+    case 'blocky':
+      return (
+        <>
+          <Slider label="Width" value={effect.size_x} min={1} max={64} step={1} unit="px" decimals={0}
+            onInput={(v) => set({ size_x: v }, 'none')} commit={commit} />
+          <Slider label="Height" value={effect.size_y} min={1} max={64} step={1} unit="px" decimals={0}
+            onInput={(v) => set({ size_y: v }, 'none')} commit={commit} />
+          <Slider label="Shift X" value={effect.offset_x} min={0} max={32} step={1} unit="px" decimals={0}
+            onInput={(v) => set({ offset_x: v }, 'none')} commit={commit} />
+          <Slider label="Shift Y" value={effect.offset_y} min={0} max={32} step={1} unit="px" decimals={0}
+            onInput={(v) => set({ offset_y: v }, 'none')} commit={commit} />
+        </>
+      )
+
+    case 'palette':
+      return (
+        <>
+          <Row label="Palette">
+            <select
+              value={effect.preset}
+              onChange={(e) => set({ preset: e.target.value as PalettePreset })}
+              className="flex-1 min-w-0 bg-slate-950 border border-slate-700 text-white text-[10px] rounded h-6 px-1"
+            >
+              {PALETTES.map((p) => (
+                <option key={p.id} value={p.id}>{`${p.label} (${p.colors.length})`}</option>
+              ))}
+            </select>
+          </Row>
+          <div className="flex items-center gap-px flex-wrap pl-16">
+            {PALETTES.find((p) => p.id === effect.preset)?.colors.map((hex) => (
+              <span key={hex} title={hex} style={{ backgroundColor: hex }} className="w-3.5 h-3.5 rounded-[2px]" />
+            ))}
+          </div>
+          <Slider label="Mix" value={effect.mix} min={0} max={1} step={0.01}
+            onInput={(v) => set({ mix: v }, 'none')} commit={commit} />
+          <Check label="Dither" checked={effect.dither} onChange={(v) => set({ dither: v })} />
+        </>
+      )
+
+    case 'scanlines':
+      return (
+        <>
+          <Row label="Pattern">
+            <select
+              value={effect.mode}
+              onChange={(e) => set({ mode: e.target.value as ScanlineMode })}
+              className="flex-1 min-w-0 bg-slate-950 border border-slate-700 text-white text-[10px] rounded h-6 px-1"
+            >
+              {SCANLINE_MODES.map((m) => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+          </Row>
+          <Slider label="Spacing" value={effect.spacing} min={2} max={24} step={1} unit="px" decimals={0}
+            onInput={(v) => set({ spacing: v }, 'none')} commit={commit} />
+          {effect.mode !== 'grille' && (
+            <Slider label="Weight" value={effect.thickness} min={1} max={12} step={1} unit="px" decimals={0}
+              onInput={(v) => set({ thickness: v }, 'none')} commit={commit} />
+          )}
+          <Slider label="Strength" value={effect.intensity} min={0} max={1} step={0.01}
+            onInput={(v) => set({ intensity: v }, 'none')} commit={commit} />
+        </>
+      )
+
+    case 'chroma':
+      return (
+        <>
+          <Slider label="Split" value={effect.amount} min={0} max={0.05} step={0.001} decimals={3}
+            onInput={(v) => set({ amount: v }, 'none')} commit={commit} />
+          <Slider label="Angle" value={effect.angle} min={0} max={360} step={1} unit="°" decimals={0}
+            onInput={(v) => set({ angle: v }, 'none')} commit={commit} />
+        </>
+      )
+
+    case 'noise':
+      return (
+        <>
+          <Slider label="Amount" value={effect.amount} min={0} max={1} step={0.01}
+            onInput={(v) => set({ amount: v }, 'none')} commit={commit} />
+          <Slider label="Grain" value={effect.size} min={1} max={12} step={1} unit="px" decimals={0}
+            onInput={(v) => set({ size: v }, 'none')} commit={commit} />
+          <Check label="Monochrome" checked={effect.mono} onChange={(v) => set({ mono: v })} />
+          <Row label="Seed">
+            <span className="text-slate-500 text-[10px] font-mono flex-1 truncate">{effect.seed}</span>
+            <button
+              onClick={() => set({ seed: randomNoiseSeed() })}
+              title="Shuffle the grain"
+              className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-light text-slate-400 hover:text-white hover:bg-slate-800"
+            >
+              <IconDice5 size={12} stroke={1.5} />
+              Shuffle
+            </button>
+          </Row>
+        </>
       )
 
     case 'posterize':

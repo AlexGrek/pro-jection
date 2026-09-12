@@ -20,9 +20,14 @@ export type EffectType =
   | 'color'
   | 'bloom'
   | 'blur'
-  | 'tilt_shift'
+  | 'warp'
   | 'pixelate'
+  | 'blocky'
   | 'posterize'
+  | 'palette'
+  | 'scanlines'
+  | 'chroma'
+  | 'noise'
   | 'threshold'
   | 'duotone'
   | 'vignette'
@@ -108,22 +113,26 @@ export interface BlurEffect extends BaseEffect {
 }
 
 /**
- * Tilt-shift: one sharp band across the canvas, bokeh-blurred away from it. The band
- * always runs through the centre — `falloff` sets how tight it is and `angle` which
- * way it runs.
+ * Warp: push every pixel along a smooth noise field — uneven glass, heat haze, a
+ * rippled surface. Deterministic on purpose: `seed` drives the noise, so the
+ * controller and every projector bend the image identically from the same scene JSON.
+ * Never regenerate this from `Math.random()` at render time.
+ *
+ * Unlike the keystone warp this is a per-pixel image distortion, not a quad transform,
+ * and like `barrel` it moves the image without moving the controller's hit-testing.
  */
-export interface TiltShiftEffect extends BaseEffect {
-  type: 'tilt_shift'
-  /** Bokeh sample radius at full blur, 0 – 2. */
-  radius: number
-  /** Highlight bloom inside the bokeh, 0 – 4. */
+export interface WarpEffect extends BaseEffect {
+  type: 'warp'
+  /** Peak displacement as a fraction of the canvas, 0 – 0.3. */
   amount: number
-  /** Bokeh contrast, 0 – 1. */
-  contrast: number
-  /** How fast the blur ramps away from the centre — higher = narrower sharp band, 0.2 – 4. */
-  falloff: number
-  /** Orientation of the sharp band in degrees, 0 (horizontal) – 180. */
-  angle: number
+  /** Noise cells across the canvas, 2 – 32. Higher = finer, busier ripples. */
+  scale: number
+  /** PRNG seed. Same seed + scale always produce the same distortion. */
+  seed: number
+}
+
+export function randomWarpSeed(): number {
+  return Math.floor(Math.random() * 1_000_000_000)
 }
 
 /** Mosaic. `amount` is the block size in canvas pixels. */
@@ -131,6 +140,22 @@ export interface PixelateEffect extends BaseEffect {
   type: 'pixelate'
   /** Block size in canvas pixels, 1 (off) – 48. */
   amount: number
+}
+
+/**
+ * Blocks: the same idea as `pixelate` but with independent width and height, so the
+ * grid can be a non-square "text mode" or CRT cell rather than a square pixel. The
+ * offset slides the grid, which is what stops a block edge landing on a hard line.
+ */
+export interface BlockyEffect extends BaseEffect {
+  type: 'blocky'
+  /** Block width in canvas pixels, 1 – 64. */
+  size_x: number
+  /** Block height in canvas pixels, 1 – 64. */
+  size_y: number
+  /** Grid offset in canvas pixels, 0 – 32 on each axis. */
+  offset_x: number
+  offset_y: number
 }
 
 /** Posterize: quantise each channel to a small number of levels. */
@@ -172,6 +197,125 @@ export interface DuotoneEffect extends BaseEffect {
   dither: boolean
 }
 
+/**
+ * Retro palettes, luminance-ordered darkest → lightest. `palette` maps each pixel's
+ * luminance onto one of these entries with no interpolation, so the output only ever
+ * contains these exact colours. Order matters: `GradientMap` walks the ramp by
+ * luminance, so an out-of-order entry reads as a banding artefact.
+ */
+export type PalettePreset = 'mono' | 'gameboy' | 'green' | 'amber' | 'cga' | 'c64' | 'nes' | 'pico8'
+
+export const PALETTES: { id: PalettePreset; label: string; colors: string[] }[] = [
+  { id: 'mono', label: '1-bit', colors: ['#000000', '#ffffff'] },
+  { id: 'gameboy', label: 'Game Boy', colors: ['#0f380f', '#306230', '#8bac0f', '#9bbc0f'] },
+  { id: 'green', label: 'Green phosphor', colors: ['#000000', '#003b00', '#008f11', '#00ff41'] },
+  { id: 'amber', label: 'Amber phosphor', colors: ['#0d0600', '#552200', '#b26b00', '#ffb000'] },
+  { id: 'cga', label: 'CGA', colors: ['#000000', '#ff55ff', '#55ffff', '#ffffff'] },
+  {
+    id: 'c64',
+    label: 'C64',
+    colors: [
+      '#000000', '#352879', '#574200', '#883932', '#6f3d86', '#8b5429', '#626262',
+      '#6c5eb5', '#9a6759', '#adadad', '#b8c76f', '#aaff66', '#ffffff',
+    ],
+  },
+  {
+    id: 'nes',
+    label: 'NES',
+    colors: [
+      '#000000', '#0000bc', '#bc0000', '#6844fc', '#00a800', '#f83800', '#00e8d8',
+      '#f878f8', '#f8b800', '#bcbcbc', '#b8f818', '#fcfcfc',
+    ],
+  },
+  {
+    id: 'pico8',
+    label: 'PICO-8',
+    colors: [
+      '#000000', '#1d2b53', '#7e2553', '#ff004d', '#5f574f', '#008751', '#ab5236',
+      '#83769c', '#29adff', '#00e436', '#ff77a8', '#ffa300', '#c2c3c7', '#ffccaa',
+      '#ffec27', '#fff1e8',
+    ],
+  },
+]
+
+export const paletteColors = (preset: PalettePreset): string[] =>
+  (PALETTES.find((p) => p.id === preset) ?? PALETTES[0]).colors
+
+/**
+ * Palette: crush the image to a fixed retro palette by luminance. Same machinery as
+ * `duotone` (a `GradientMap` ramp) but with flat bands and a curated colour list, which
+ * is what makes it read as hardware rather than as a colour wash.
+ */
+export interface PaletteEffect extends BaseEffect {
+  type: 'palette'
+  preset: PalettePreset
+  /** Blend with the untouched image, 0 (original) – 1 (full palette). */
+  mix: number
+  /** Dither the lookup, trading banding for a stipple — the classic 8-bit compromise. */
+  dither: boolean
+}
+
+/** Which CRT pattern `scanlines` lays over the canvas. */
+export type ScanlineMode = 'lines' | 'grille' | 'dots'
+
+export const SCANLINE_MODES: { id: ScanlineMode; label: string }[] = [
+  { id: 'lines', label: 'Scanlines' },
+  { id: 'grille', label: 'Aperture grille' },
+  { id: 'dots', label: 'Dot screen' },
+]
+
+/**
+ * Scanlines: multiply a repeating CRT pattern over the canvas. `lines` darkens every
+ * Nth row, `grille` splits into R/G/B columns like an aperture-grille tube, and `dots`
+ * lays down a fixed print-style dot screen (a fixed screen, not a true luminance
+ * halftone).
+ *
+ * The pattern is drawn at full canvas resolution with nearest-neighbour filtering — a
+ * scaled-down pattern turns into grey mush.
+ */
+export interface ScanlinesEffect extends BaseEffect {
+  type: 'scanlines'
+  mode: ScanlineMode
+  /** Pattern period in canvas pixels, 2 – 24. */
+  spacing: number
+  /** Line height / dot diameter in canvas pixels, 1 – 12. Clamped below `spacing`. */
+  thickness: number
+  /** How hard the pattern bites, 0 – 1. */
+  intensity: number
+}
+
+/**
+ * Chromatic aberration: split the red channel away from green and blue along an axis.
+ * Built from a `ParallelFilters` composite — see `postfx.ts`.
+ */
+export interface ChromaEffect extends BaseEffect {
+  type: 'chroma'
+  /** Separation as a fraction of canvas width, 0 – 0.05. */
+  amount: number
+  /** Direction of the split in degrees, 0 – 360. */
+  angle: number
+}
+
+/**
+ * Noise: overlay seeded grain — film stock, VHS, video hiss. Deterministic for the same
+ * reason `warp` is: every client must generate the same grain from the same scene JSON.
+ */
+export interface NoiseEffect extends BaseEffect {
+  type: 'noise'
+  /** How strongly the grain is mixed in, 0 – 1. */
+  amount: number
+  /** Grain size in canvas pixels, 1 (per-pixel) – 12 (chunky). */
+  size: number
+  /** Monochrome grain, or independent per-channel colour speckle. */
+  mono: boolean
+  /** PRNG seed. Same seed + size always produce the same grain. */
+  seed: number
+}
+
+export function randomNoiseSeed(): number {
+  return Math.floor(Math.random() * 1_000_000_000)
+}
+
 /** Vignette: darken (or lighten) the canvas away from a centre point. */
 export interface VignetteEffect extends BaseEffect {
   type: 'vignette'
@@ -201,9 +345,14 @@ export type Effect =
   | ColorEffect
   | BloomEffect
   | BlurEffect
-  | TiltShiftEffect
+  | WarpEffect
   | PixelateEffect
+  | BlockyEffect
   | PosterizeEffect
+  | PaletteEffect
+  | ScanlinesEffect
+  | ChromaEffect
+  | NoiseEffect
   | ThresholdEffect
   | DuotoneEffect
   | VignetteEffect
@@ -213,16 +362,21 @@ export type Effect =
  * Chain length cap. Every entry is another full-canvas GPU pass on every client, and
  * the projector is the machine that can least afford to drop frames.
  */
-export const EFFECT_MAX = 6
+export const EFFECT_MAX = 8
 
 /** Pickable effects, in menu order. */
 export const EFFECT_TYPES: { id: EffectType; label: string; hint: string }[] = [
   { id: 'color', label: 'Colour grade', hint: 'Preset matrix + brightness / contrast / saturation / hue' },
   { id: 'bloom', label: 'Bloom', hint: 'Blurred bright-pass added back over the image' },
   { id: 'blur', label: 'Blur', hint: 'Soften the whole canvas' },
-  { id: 'tilt_shift', label: 'Tilt shift', hint: 'One sharp band, blurred away from it' },
-  { id: 'pixelate', label: 'Pixelate', hint: 'Mosaic blocks' },
+  { id: 'warp', label: 'Warp', hint: 'Ripple the image through a seeded noise field' },
+  { id: 'pixelate', label: 'Pixelate', hint: 'Square mosaic blocks' },
+  { id: 'blocky', label: 'Blocks', hint: 'Non-square pixel grid with an offset' },
   { id: 'posterize', label: 'Posterize', hint: 'Quantise each channel to a few levels' },
+  { id: 'palette', label: 'Palette', hint: 'Crush to a retro palette — Game Boy, CGA, C64, PICO-8…' },
+  { id: 'scanlines', label: 'Scanlines', hint: 'CRT scanlines, aperture grille or dot screen' },
+  { id: 'chroma', label: 'Chromatic', hint: 'Split the red channel away from green and blue' },
+  { id: 'noise', label: 'Noise', hint: 'Seeded film / VHS grain over everything' },
   { id: 'threshold', label: 'Threshold', hint: 'Crush to two tones with a soft edge' },
   { id: 'duotone', label: 'Duotone', hint: 'Remap luminance onto a colour ramp' },
   { id: 'vignette', label: 'Vignette', hint: 'Darken the edges of the projection' },
@@ -245,10 +399,20 @@ export function createEffect(type: EffectType): Effect {
       return { id, enabled: true, type, threshold: 0.6, radius: 8, strength: 1 }
     case 'blur':
       return { id, enabled: true, type, radius: 4, strength: 1 }
-    case 'tilt_shift':
-      return { id, enabled: true, type, radius: 0.8, amount: 1, contrast: 0.2, falloff: 1, angle: 0 }
+    case 'warp':
+      return { id, enabled: true, type, amount: 0.06, scale: 8, seed: randomWarpSeed() }
     case 'pixelate':
       return { id, enabled: true, type, amount: 12 }
+    case 'blocky':
+      return { id, enabled: true, type, size_x: 16, size_y: 6, offset_x: 0, offset_y: 0 }
+    case 'palette':
+      return { id, enabled: true, type, preset: 'gameboy', mix: 1, dither: true }
+    case 'scanlines':
+      return { id, enabled: true, type, mode: 'lines', spacing: 6, thickness: 3, intensity: 0.7 }
+    case 'chroma':
+      return { id, enabled: true, type, amount: 0.008, angle: 0 }
+    case 'noise':
+      return { id, enabled: true, type, amount: 0.35, size: 2, mono: true, seed: randomNoiseSeed() }
     case 'posterize':
       return { id, enabled: true, type, steps: 4, dither: false, mode: 'rgb' }
     case 'threshold':
@@ -273,10 +437,20 @@ export function effectSummary(effect: Effect): string {
       return `×${effect.strength.toFixed(1)} @ ${effect.radius}px`
     case 'blur':
       return `${effect.radius}px`
-    case 'tilt_shift':
-      return `${effect.radius.toFixed(1)} @ ${Math.round(effect.angle)}°`
+    case 'warp':
+      return `${Math.round(effect.amount * 100)}% × ${effect.scale}`
     case 'pixelate':
       return `${effect.amount}px`
+    case 'blocky':
+      return `${effect.size_x}×${effect.size_y}px`
+    case 'palette':
+      return PALETTES.find((p) => p.id === effect.preset)?.label.toLowerCase() ?? effect.preset
+    case 'scanlines':
+      return `${SCANLINE_MODES.find((m) => m.id === effect.mode)?.label.toLowerCase()} ${effect.spacing}px`
+    case 'chroma':
+      return `${(effect.amount * 100).toFixed(1)}% @ ${Math.round(effect.angle)}°`
+    case 'noise':
+      return `${Math.round(effect.amount * 100)}% × ${effect.size}px`
     case 'posterize':
       return `${effect.steps} levels`
     case 'threshold':
