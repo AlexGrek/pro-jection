@@ -15,8 +15,10 @@ import type { VideoLayer } from './video'
 import type { BarcodeLayer } from './barcode'
 import type { RaysLayer } from './rays'
 import type { GrainLayer } from './grain'
+import type { LinesLayer } from './lines'
 import type { GridSettings } from './grid'
 import type { ProjectionSettings } from './projection'
+import type { ConcentricLayer } from './concentric'
 
 export * from './base'
 export * from './fonts'
@@ -29,11 +31,24 @@ export * from './video'
 export * from './barcode'
 export * from './rays'
 export * from './grain'
+export * from './concentric'
+export * from './lines'
 export * from './grid'
 export * from './projection'
 
 /** Union of all known layer types. Grows as new types are added. */
-export type Layer = TextLayer | ShapeLayer | FillLayer | IconLayer | ImageLayer | VideoLayer | BarcodeLayer | RaysLayer | GrainLayer
+export type Layer =
+  | TextLayer
+  | ShapeLayer
+  | FillLayer
+  | IconLayer
+  | ImageLayer
+  | VideoLayer
+  | BarcodeLayer
+  | RaysLayer
+  | GrainLayer
+  | ConcentricLayer
+  | LinesLayer
 
 /** A full slide: an ordered list of layers plus optional scene-wide settings. */
 export interface Scene {

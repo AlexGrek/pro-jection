@@ -16,6 +16,8 @@ import {
   IconSquare,
   IconTrash,
   IconVectorSpline,
+  IconTarget,
+  IconMenu,
 } from '@tabler/icons-react'
 import type { Layer } from '@/lib/scene'
 import { findIconDef } from '@/lib/icons'
@@ -106,7 +108,9 @@ function LayerIcon({ layer }: { layer: Layer }) {
   if (layer.type === 'barcode') return <IconBarcode size={11} className="shrink-0" />
   if (layer.type === 'rays') return <IconGridDots size={11} className="shrink-0" />
   if (layer.type === 'grain') return <IconChartDots3 size={11} className="shrink-0" />
-  if (layer.shape === 'circle') return <IconCircle size={11} className="shrink-0" />
+  if (layer.type === 'concentric') return <IconTarget size={11} className="shrink-0" />
+  if (layer.type === 'lines') return <IconMenu size={11} className="shrink-0" />
+  if (layer.type === 'shape') return layer.shape === 'circle' ? <IconCircle size={11} className="shrink-0" /> : <IconSquare size={11} className="shrink-0" />
   return <IconSquare size={11} className="shrink-0" />
 }
 
@@ -120,6 +124,8 @@ function layerLabel(layer: Layer): string {
   if (layer.type === 'barcode') return layer.code ? `Barcode ${layer.code}` : 'Barcode'
   if (layer.type === 'rays') return layer.fullscreen ? 'Rays (fullscreen)' : `Rays ${layer.columns}×${layer.rows}`
   if (layer.type === 'grain') return layer.fullscreen ? 'Grain (fullscreen)' : 'Grain'
+  if (layer.type === 'concentric') return `Concentric ${layer.shape}`
+  if (layer.type === 'lines') return layer.fullscreen ? 'Lines (fullscreen)' : 'Lines'
   return (layer as Layer).type
 }
 

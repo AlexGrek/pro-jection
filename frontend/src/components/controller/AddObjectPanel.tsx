@@ -10,6 +10,8 @@ import {
   IconPhoto,
   IconSquare,
   IconVectorSpline,
+  IconTarget,
+  IconMenu,
 } from '@tabler/icons-react'
 
 interface Props {
@@ -24,9 +26,11 @@ interface Props {
   onAddBarcode: () => void
   onAddRays: () => void
   onAddGrain: () => void
+  onAddConcentric: () => void
+  onAddLines: () => void
 }
 
-export function AddObjectPanel({ disabled, onAddText, onAddRectangle, onAddCircle, onAddFill, onAddIcon, onAddImage, onAddVideo, onAddBarcode, onAddRays, onAddGrain }: Props) {
+export function AddObjectPanel({ disabled, onAddText, onAddRectangle, onAddCircle, onAddFill, onAddIcon, onAddImage, onAddVideo, onAddBarcode, onAddRays, onAddGrain, onAddConcentric, onAddLines }: Props) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
@@ -43,6 +47,8 @@ export function AddObjectPanel({ disabled, onAddText, onAddRectangle, onAddCircl
         <AddButton disabled={disabled} icon={<IconBarcode size={13} />} label="Barcode" onClick={onAddBarcode} />
         <AddButton disabled={disabled} icon={<IconGridDots size={13} />} label="Rays" onClick={onAddRays} />
         <AddButton disabled={disabled} icon={<IconChartDots3 size={13} />} label="Grain" onClick={onAddGrain} />
+        <AddButton disabled={disabled} icon={<IconTarget size={13} />} label="Concentric" onClick={onAddConcentric} />
+        <AddButton disabled={disabled} icon={<IconMenu size={13} />} label="Lines" onClick={onAddLines} />
       </div>
     </div>
   )

@@ -23,6 +23,8 @@ import { AddObjectPanel } from '@/components/controller/AddObjectPanel'
 import { ArrayModifierPanel } from '@/components/controller/ArrayModifierPanel'
 import { BarcodeProperties } from '@/components/controller/BarcodeProperties'
 import { ColorPicker } from '@/components/controller/ColorPicker'
+import { ConcentricProperties } from '@/components/controller/ConcentricProperties'
+import { LinesProperties } from '@/components/controller/LinesProperties'
 import { GlowAnimationPanel } from '@/components/controller/GlowAnimationPanel'
 import { GlowModifierPanel } from '@/components/controller/GlowModifierPanel'
 import { MatrixModifierPanel } from '@/components/controller/MatrixModifierPanel'
@@ -53,6 +55,8 @@ import {
   DEFAULT_IMAGE_LAYER,
   DEFAULT_RAYS_LAYER,
   DEFAULT_GRAIN_LAYER,
+  DEFAULT_CONCENTRIC_LAYER,
+  DEFAULT_LINES_LAYER,
   DEFAULT_RECT_LAYER,
   DEFAULT_TEXT_LAYER,
   DEFAULT_VIDEO_LAYER,
@@ -66,6 +70,8 @@ import {
   type BarcodeLayer,
   type RaysLayer,
   type GrainLayer,
+  type ConcentricLayer,
+  type LinesLayer,
   type GridSettings,
   type Layer,
   type Scene,
@@ -103,6 +109,20 @@ function resizeLayer(layer: Layer, factor: number): Layer {
         width: clamp(layer.width * factor, 0.01, 3),
         height: clamp(layer.height * factor, 0.01, 3),
       }
+    case 'concentric':
+      return {
+        ...layer,
+        width: clamp(layer.width * factor, 0.01, 3),
+        height: clamp(layer.height * factor, 0.01, 3),
+      }
+    case 'lines':
+      return layer.fullscreen
+        ? layer
+        : {
+            ...layer,
+            width: clamp(layer.width * factor, 0.01, 3),
+            height: clamp(layer.height * factor, 0.01, 3),
+          }
     case 'icon':
       return { ...layer, size: clamp(layer.size * factor, 0.01, 3) }
     case 'image':
@@ -558,6 +578,8 @@ export function ControllerPage() {
     id: crypto.randomUUID(),
     seed: randomGrainSeed(),
   } as GrainLayer)
+  const addConcentric = () => addLayerAtEnd({ ...DEFAULT_CONCENTRIC_LAYER, id: crypto.randomUUID() } as ConcentricLayer)
+  const addLines = () => addLayerAtEnd({ ...DEFAULT_LINES_LAYER, id: crypto.randomUUID() } as LinesLayer)
 
   const addFill = () => {
     const newLayer: FillLayer = {
@@ -731,6 +753,8 @@ export function ControllerPage() {
       {selected.type === 'barcode' && <BarcodeProperties layer={selected} controls={controls} />}
       {selected.type === 'rays'   && <RaysProperties    layer={selected} controls={controls} />}
       {selected.type === 'grain' && <GrainProperties   layer={selected} controls={controls} />}
+      {selected.type === 'concentric' && <ConcentricProperties layer={selected} controls={controls} />}
+      {selected.type === 'lines' && <LinesProperties layer={selected} controls={controls} />}
 
       {selected.type !== 'fill' && selected.type !== 'image' && selected.type !== 'video' && selected.type !== 'barcode' && selected.type !== 'grain' && (
         <PropertyRow label="Color">
@@ -762,7 +786,8 @@ export function ControllerPage() {
 
       {selected.type !== 'fill' &&
         !(selected.type === 'rays' && selected.fullscreen) &&
-        !(selected.type === 'grain' && selected.fullscreen) && (
+        !(selected.type === 'grain' && selected.fullscreen) &&
+        !(selected.type === 'lines' && selected.fullscreen) && (
         <PropertyRow label="Pos">
           <span className="text-slate-400 text-[10px] font-mono">
             {selected.x.toFixed(2)}, {selected.y.toFixed(2)}
@@ -781,7 +806,7 @@ export function ControllerPage() {
   const modifiersContent = (
     <div className="flex-1 min-h-0 overflow-y-auto">
       {selected ? (
-        selected.type === 'rays' || selected.type === 'grain' ? (
+        selected.type === 'rays' || selected.type === 'grain' || selected.type === 'lines' ? (
           <p className="text-slate-700 text-[10px] px-3 py-2 italic">No modifiers for {selected.type}.</p>
         ) : (
           <>
@@ -801,7 +826,7 @@ export function ControllerPage() {
   const animationsContent = (
     <div className="flex-1 min-h-0 overflow-y-auto">
       {selected ? (
-        selected.type === 'fill' || selected.type === 'rays' || selected.type === 'grain' ? (
+        selected.type === 'fill' || selected.type === 'rays' || selected.type === 'grain' || selected.type === 'lines' ? (
           <p className="text-slate-700 text-[10px] px-3 py-2 italic">
             No animations for {selected.type === 'fill' ? 'fills' : selected.type}.
           </p>
@@ -1039,6 +1064,8 @@ export function ControllerPage() {
               onAddBarcode={addBarcode}
               onAddRays={addRays}
               onAddGrain={addGrain}
+              onAddConcentric={addConcentric}
+              onAddLines={addLines}
             />
           )}
         </div>
@@ -1239,6 +1266,8 @@ export function ControllerPage() {
               onAddBarcode={addBarcode}
               onAddRays={addRays}
               onAddGrain={addGrain}
+              onAddConcentric={addConcentric}
+              onAddLines={addLines}
             />
           </div>
         </div>

@@ -7,6 +7,8 @@ export const IMAGE_TEXTURE_PREFIX = 'img-'
 export const BARCODE_TEXTURE_PREFIX = 'barcode-'
 export const RAYS_TEXTURE_PREFIX = 'rays-'
 export const GRAIN_TEXTURE_PREFIX = 'grain-'
+export const CONCENTRIC_TEXTURE_PREFIX = 'concentric-'
+export const LINES_TEXTURE_PREFIX = 'lines-'
 
 /** Trough of the glow-breathing cycle, as a fraction of the configured strength.
  *  Above 0 so the glow eases in and out rather than blinking fully off. */

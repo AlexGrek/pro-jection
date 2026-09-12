@@ -61,7 +61,7 @@ The layers panel renders in **reverse** array order (top-of-panel = front-of-sta
 
 ## Scene type system
 
-Canonical types live under [frontend/src/lib/scene/](frontend/src/lib/scene/), one file per layer kind, re-exported from [index.ts](frontend/src/lib/scene/index.ts) — **check that file for the current `Layer` union**, it grows independently of this doc. JSON wire format is snake_case to match Rust conventions; the backend never inspects layer content. Layer kinds as of writing: text, shape (rect/circle), fill (solid/gradient), icon, image, video, barcode, rays — but verify against `index.ts` rather than this list.
+Canonical types live under [frontend/src/lib/scene/](frontend/src/lib/scene/), one file per layer kind, re-exported from [index.ts](frontend/src/lib/scene/index.ts) — **check that file for the current `Layer` union**, it grows independently of this doc. JSON wire format is snake_case to match Rust conventions; the backend never inspects layer content. Layer kinds as of writing: text, shape (rect/circle), fill (solid/gradient), icon, image, video, barcode, rays, grain, concentric, lines — but verify against `index.ts` rather than this list.
 
 `base.ts` defines `BaseLayer` (`id`, `x`/`y` 0–1, `opacity`, `animations`, `modifiers`) plus the `Animations`/`Modifier` union (glow animation; array/glow/matrix modifiers) — check it for exact fields, they carry non-obvious ranges/units in doc comments. `grid.ts` and `projection.ts` hold the two scene-wide (non-layer) settings that ride along on every send: grid overlay and keystone-warp projection; absent means off for both.
 
