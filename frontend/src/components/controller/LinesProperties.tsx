@@ -1,6 +1,7 @@
 import type { LinesLayer } from '@/lib/scene'
 import { PropertyRow } from './PropertyRow'
 import type { PropertyControls } from './types'
+import { IconMenu } from '@tabler/icons-react'
 
 interface Props {
   layer: LinesLayer
@@ -26,17 +27,37 @@ export function LinesProperties({ layer, controls }: Props) {
       </PropertyRow>
 
       <PropertyRow label="Angle">
-        <input
-          type="range"
-          min={0}
-          max={180}
-          value={layer.angle}
-          onChange={(e) => patch({ angle: Number(e.target.value) })}
-          onPointerUp={sendCurrent}
-          onKeyUp={sendCurrent}
-          disabled={disabled}
-          className="flex-1 accent-blue-500 touch-none"
-        />
+        <div className="flex flex-1 items-center gap-1.5">
+          <input
+            type="range"
+            min={0}
+            max={180}
+            value={layer.angle}
+            onChange={(e) => patch({ angle: Number(e.target.value) })}
+            onPointerUp={sendCurrent}
+            onKeyUp={sendCurrent}
+            disabled={disabled}
+            className="flex-1 accent-blue-500 touch-none min-w-0"
+          />
+          <div className="flex items-center shrink-0">
+            <button
+              onClick={() => sendNow(patch({ angle: 90 }))}
+              disabled={disabled}
+              title="Snap to Horizontal (90°)"
+              className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
+            >
+              <IconMenu size={13} />
+            </button>
+            <button
+              onClick={() => sendNow(patch({ angle: 0 }))}
+              disabled={disabled}
+              title="Snap to Vertical (0°)"
+              className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
+            >
+              <IconMenu size={13} className="rotate-90" />
+            </button>
+          </div>
+        </div>
         <span className="text-slate-400 text-[10px] w-7 text-right shrink-0">{layer.angle}°</span>
       </PropertyRow>
 
