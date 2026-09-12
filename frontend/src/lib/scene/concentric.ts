@@ -22,7 +22,7 @@ export const DEFAULT_CONCENTRIC_LAYER: Omit<ConcentricLayer, 'id'> = {
   x: 0.5,
   y: 0.5,
   width: 0.4,
-  height: 0.4,
+  height: 0.4 * (16 / 9),
   aspect_locked: true,
   color: '#a855f7',
   count: 3,

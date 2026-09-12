@@ -1,6 +1,7 @@
 import type { ConcentricLayer } from '@/lib/scene'
 import { PropertyRow } from './PropertyRow'
 import type { PropertyControls } from './types'
+import { CANVAS_W, CANVAS_H } from '@/lib/phaser/constants'
 
 interface Props {
   layer: ConcentricLayer
@@ -9,6 +10,7 @@ interface Props {
 
 export function ConcentricProperties({ layer, controls }: Props) {
   const { patch, sendNow, sendCurrent, disabled } = controls
+  const aspectMultiplier = CANVAS_W / CANVAS_H // 1920 / 1080 = 1.777...
 
   return (
     <>
@@ -33,7 +35,7 @@ export function ConcentricProperties({ layer, controls }: Props) {
             onChange={(e) => {
               const locked = e.target.checked
               if (locked) {
-                sendNow(patch({ aspect_locked: true, height: layer.width }))
+                sendNow(patch({ aspect_locked: true, height: layer.width * aspectMultiplier }))
               } else {
                 sendNow(patch({ aspect_locked: false }))
               }
@@ -53,7 +55,7 @@ export function ConcentricProperties({ layer, controls }: Props) {
           value={Math.round(layer.width * 100)}
           onChange={(e) => {
             const w = Number(e.target.value) / 100
-            patch(layer.aspect_locked ? { width: w, height: w } : { width: w })
+            patch(layer.aspect_locked ? { width: w, height: w * aspectMultiplier } : { width: w })
           }}
           onPointerUp={sendCurrent}
           onKeyUp={sendCurrent}
@@ -71,7 +73,7 @@ export function ConcentricProperties({ layer, controls }: Props) {
           value={Math.round(layer.height * 100)}
           onChange={(e) => {
             const h = Number(e.target.value) / 100
-            patch(layer.aspect_locked ? { width: h, height: h } : { height: h })
+            patch(layer.aspect_locked ? { width: h / aspectMultiplier, height: h } : { height: h })
           }}
           onPointerUp={sendCurrent}
           onKeyUp={sendCurrent}
