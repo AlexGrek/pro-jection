@@ -108,21 +108,28 @@ function drawBlock(c: CanvasRenderingContext2D, layer: CodeLayer, tw: number, th
   }
 }
 
+/** One continuous, unbroken stream of tokens (no indentation, no line logic) wrapped
+ *  across the full texture height — like a giant minified one-liner as an editor would
+ *  soft-wrap it, so the pattern fills the bounding box instead of a single clipped row. */
 function drawOneliner(c: CanvasRenderingContext2D, layer: CodeLayer, tw: number, th: number, rand: Rand): void {
   const fontSize = layer.font_size
   c.font = `${fontSize}px ${MONOSPACE_FONT}`
-  c.textBaseline = 'middle'
+  c.textBaseline = 'alphabetic'
+  const lineHeight = fontSize * 1.3
   const padding = fontSize * 0.5
   const maxX = tw - padding
-  const y = th / 2
   const spaceW = c.measureText(' ').width
-  let x = padding
+  const numLines = Math.max(1, Math.floor((th - padding) / lineHeight))
 
-  while (x < maxX) {
-    const [text, role] = randToken(rand)
-    c.fillStyle = colorFor(layer, role)
-    c.fillText(text, x, y)
-    x += c.measureText(text).width + (rand() < 0.7 ? 0 : spaceW)
+  for (let i = 0; i < numLines; i++) {
+    const y = padding + (i + 1) * lineHeight - lineHeight * 0.3
+    let x = padding
+    while (x < maxX) {
+      const [text, role] = randToken(rand)
+      c.fillStyle = colorFor(layer, role)
+      c.fillText(text, x, y)
+      x += c.measureText(text).width + (rand() < 0.7 ? 0 : spaceW)
+    }
   }
 }
 

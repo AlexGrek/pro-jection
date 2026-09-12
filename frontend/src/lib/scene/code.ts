@@ -9,7 +9,7 @@ export const CODE_MAX_COLORS = 6
 /** Named syntax-highlight presets, each a 5-colour [keyword, string, comment, number,
  *  plain] role palette. `custom` is not a preset — it marks that `colors` was hand-edited
  *  and no longer matches any preset below. */
-export type CodeScheme = 'vscode-dark' | 'monokai' | 'dracula' | 'solarized-dark' | 'nord' | 'gruvbox-dark' | 'custom'
+export type CodeScheme = 'vscode-dark' | 'monokai' | 'dracula' | 'solarized-dark' | 'nord' | 'gruvbox-dark' | 'green-white' | 'one-dark' | 'tokyo-night' | 'synthwave' | 'custom'
 
 export const CODE_SCHEME_PRESETS: Record<Exclude<CodeScheme, 'custom'>, string[]> = {
   'vscode-dark': ['#569cd6', '#ce9178', '#6a9955', '#b5cea8', '#d4d4d4'],
@@ -18,6 +18,10 @@ export const CODE_SCHEME_PRESETS: Record<Exclude<CodeScheme, 'custom'>, string[]
   'solarized-dark': ['#859900', '#2aa198', '#586e75', '#d33682', '#839496'],
   nord: ['#81a1c1', '#a3be8c', '#616e88', '#d08770', '#e5e9f0'],
   'gruvbox-dark': ['#fb4934', '#b8bb26', '#928374', '#d3869b', '#ebdbb2'],
+  'green-white': ['#00ff41', '#7fff9f', '#0d7a3d', '#ffffff', '#c0f0c0'],
+  'one-dark': ['#c678dd', '#98c379', '#5c6370', '#d19a66', '#abb2bf'],
+  'tokyo-night': ['#bb9af7', '#9ece6a', '#565f89', '#ff9e64', '#c0caf5'],
+  synthwave: ['#f92aad', '#f890c8', '#8b8496', '#fce566', '#36f9f6'],
 }
 
 export const CODE_SCHEME_LABELS: Record<Exclude<CodeScheme, 'custom'>, string> = {
@@ -27,6 +31,10 @@ export const CODE_SCHEME_LABELS: Record<Exclude<CodeScheme, 'custom'>, string> =
   'solarized-dark': 'Solarized Dark',
   nord: 'Nord',
   'gruvbox-dark': 'Gruvbox Dark',
+  'green-white': 'Green & White',
+  'one-dark': 'One Dark',
+  'tokyo-night': 'Tokyo Night',
+  synthwave: 'Synthwave',
 }
 
 /** A generated pattern that reads as code — a scrolling function body, a giant
