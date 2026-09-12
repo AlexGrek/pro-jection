@@ -20,7 +20,7 @@ parses it — see [CLAUDE.md](CLAUDE.md)'s Conventions.
 
 ## The effects
 
-Each entry is `{ id, enabled, type, …params }`. Ten kinds as of writing — check the
+Each entry is `{ id, enabled, type, …params }`. Fifteen kinds as of writing — check the
 `Effect` union in `effects.ts` rather than this list, and read the doc comments there
 for the exact ranges, which the UI enforces.
 
@@ -30,15 +30,23 @@ for the exact ranges, which the UI enforces.
 | `bloom` | `ParallelFilters` (`Threshold` → `Blur`, blended `ADD`) | Blurred bright-pass added back over the image |
 | `blur` | `Blur` | Soften the whole canvas |
 | `warp` | `Displacement` | Ripple the image through a seeded noise field |
-| `pixelate` | `Pixelate` | Mosaic blocks |
+| `pixelate` | `Pixelate` | Square mosaic blocks |
+| `blocky` | `Blocky` | Non-square pixel grid with an offset — "text mode" cells, CRT wide pixels |
 | `posterize` | `Quantize` | Quantise each channel to a few levels, RGB or HSV |
+| `palette` | `GradientMap` (flat bands) | Crush to a fixed retro palette — Game Boy, CGA, C64, NES, PICO-8, phosphor monitors |
 | `threshold` | `Threshold` | Crush to two tones with a soft edge |
 | `duotone` | `GradientMap` | Remap luminance onto a 2–4 stop colour ramp |
+| `scanlines` | `Blend` (`MULTIPLY`) | CRT scanlines, aperture grille, or a print-style dot screen |
+| `chroma` | `ParallelFilters` (two `ColorMatrix` + `Displacement` branches, blended `ADD`) | Split the red channel away from green and blue |
+| `noise` | `Blend` (`OVERLAY`) | Seeded film / VHS grain over everything |
 | `vignette` | `Vignette` | Darken the edges of the projection |
 | `barrel` | `Barrel` | Barrel / pincushion lens distortion |
 
-`EFFECT_MAX` caps the chain at six. Each entry is another full-canvas GPU pass on every
+`EFFECT_MAX` caps the chain at eight. Each entry is another full-canvas GPU pass on every
 client, and the projector is the machine that can least afford to drop frames.
+
+A representative retro stack, front to back: `palette` (green phosphor) → `blocky` →
+`scanlines` → `chroma` → `noise` → `vignette`.
 
 ## Rules that are easy to get wrong
 
@@ -77,10 +85,38 @@ disabled outright.
 frame wherever the offset points inwards, and there is nothing there — without the
 `WARP_EDGE_BAND` falloff a projector gets black scalloped borders.
 
+**Generated textures are redrawn on a signature, not on every apply.** `warp`,
+`scanlines` and `noise` each own one canvas texture keyed by their effect id under
+`POSTFX_TEXTURE_PREFIX`. `_regenerate` redraws only when the parameters the *texture*
+depends on move — everything else (a warp's displacement amount, a scanline's strength,
+a noise's mix) is a live filter property that costs nothing. After a redraw the filter is
+always re-pointed at the key, because `CanvasTexture.setSize` can reallocate the backing
+GL texture and leave the filter holding a stale wrapper.
+
+**The scanline pattern is built from a tile, not a pixel loop.** It has to be drawn at
+the full 1920×1080 camera resolution — `Blend` samples its texture at `outTexCoord`, so
+a smaller pattern gets stretched into grey mush, and the texture is set to
+`FilterMode.NEAREST` for the same reason. A per-pixel loop over two million pixels would
+stall the controller on every parameter change, so one small tile is filled and repeated
+with `createPattern`. Noise goes the other way: it is generated at canvas size *divided*
+by the grain size, so a chunkier grain is cheaper, not dearer.
+
+**Chromatic aberration bands the frame edge at large splits.** Each branch samples
+outside the frame where its shift points inward, and there is nothing there — so a big
+`amount` leaves a red bar down one edge and a cyan bar down the other. That is honest
+behaviour for the effect and visible the moment you drag the slider; it is deliberately
+*not* faded out the way the warp map is, because fading would make the split wrong in the
+middle of the frame too.
+
+**Palette bands must be luminance-ordered.** `GradientMap` walks the ramp by luminance
+(its default `colorFactor` is `[0.3, 0.6, 0.1, 0]`), so an out-of-order entry in
+`PALETTES` reads as a banding artefact rather than as a palette. Bands are flat because
+`ColorBandConfig.colorEnd` defaults to `colorStart`.
+
 **Duotone owns its `ColorRamp`.** `GradientMap` never destroys a ramp it was handed, and
 a ramp allocates a GPU data texture. The ramp is therefore created once per effect,
 updated in place with `setBands` (which re-encodes into the same texture), and destroyed
-in `_teardown`.
+in `_teardown`. `palette` uses the same machinery for the same reason.
 
 ## Phaser 4.1 gotcha: Bokeh / tilt-shift is unusable
 
