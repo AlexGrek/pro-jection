@@ -15,6 +15,7 @@ import type { VideoLayer } from './video'
 import type { BarcodeLayer } from './barcode'
 import type { RaysLayer } from './rays'
 import type { GrainLayer } from './grain'
+import type { CodeLayer } from './code'
 import type { LinesLayer } from './lines'
 import type { GridSettings } from './grid'
 import type { ProjectionSettings } from './projection'
@@ -31,6 +32,7 @@ export * from './video'
 export * from './barcode'
 export * from './rays'
 export * from './grain'
+export * from './code'
 export * from './concentric'
 export * from './lines'
 export * from './grid'
@@ -47,6 +49,7 @@ export type Layer =
   | BarcodeLayer
   | RaysLayer
   | GrainLayer
+  | CodeLayer
   | ConcentricLayer
   | LinesLayer
 

@@ -30,6 +30,7 @@ import { GlowModifierPanel } from '@/components/controller/GlowModifierPanel'
 import { MatrixModifierPanel } from '@/components/controller/MatrixModifierPanel'
 import { FillProperties } from '@/components/controller/FillProperties'
 import { GrainProperties } from '@/components/controller/GrainProperties'
+import { CodeProperties } from '@/components/controller/CodeProperties'
 import { GridControl } from '@/components/controller/GridControl'
 import { ProjectionControl } from '@/components/controller/ProjectionControl'
 import { IconProperties } from '@/components/controller/IconProperties'
@@ -55,6 +56,7 @@ import {
   DEFAULT_IMAGE_LAYER,
   DEFAULT_RAYS_LAYER,
   DEFAULT_GRAIN_LAYER,
+  DEFAULT_CODE_LAYER,
   DEFAULT_CONCENTRIC_LAYER,
   DEFAULT_LINES_LAYER,
   DEFAULT_RECT_LAYER,
@@ -62,6 +64,7 @@ import {
   DEFAULT_VIDEO_LAYER,
   randomBarcodeValue,
   randomGrainSeed,
+  randomCodeSeed,
   withCorner,
   type ProjectionSettings,
   type FillLayer,
@@ -70,6 +73,7 @@ import {
   type BarcodeLayer,
   type RaysLayer,
   type GrainLayer,
+  type CodeLayer,
   type ConcentricLayer,
   type LinesLayer,
   type GridSettings,
@@ -132,6 +136,14 @@ function resizeLayer(layer: Layer, factor: number): Layer {
     case 'rays':
       return layer.fullscreen ? layer : { ...layer, cell_size: clamp(layer.cell_size * factor, 0.01, 0.5) }
     case 'grain':
+      return layer.fullscreen
+        ? layer
+        : {
+            ...layer,
+            width: clamp(layer.width * factor, 0.02, 3),
+            height: clamp(layer.height * factor, 0.02, 3),
+          }
+    case 'code':
       return layer.fullscreen
         ? layer
         : {
@@ -578,6 +590,11 @@ export function ControllerPage() {
     id: crypto.randomUUID(),
     seed: randomGrainSeed(),
   } as GrainLayer)
+  const addCode = () => addLayerAtEnd({
+    ...DEFAULT_CODE_LAYER,
+    id: crypto.randomUUID(),
+    seed: randomCodeSeed(),
+  } as CodeLayer)
   const addConcentric = () => addLayerAtEnd({ ...DEFAULT_CONCENTRIC_LAYER, id: crypto.randomUUID() } as ConcentricLayer)
   const addLines = () => addLayerAtEnd({ ...DEFAULT_LINES_LAYER, id: crypto.randomUUID() } as LinesLayer)
 
@@ -753,10 +770,11 @@ export function ControllerPage() {
       {selected.type === 'barcode' && <BarcodeProperties layer={selected} controls={controls} />}
       {selected.type === 'rays'   && <RaysProperties    layer={selected} controls={controls} />}
       {selected.type === 'grain' && <GrainProperties   layer={selected} controls={controls} />}
+      {selected.type === 'code' && <CodeProperties   layer={selected} controls={controls} />}
       {selected.type === 'concentric' && <ConcentricProperties layer={selected} controls={controls} />}
       {selected.type === 'lines' && <LinesProperties layer={selected} controls={controls} />}
 
-      {selected.type !== 'fill' && selected.type !== 'image' && selected.type !== 'video' && selected.type !== 'barcode' && selected.type !== 'grain' && (
+      {selected.type !== 'fill' && selected.type !== 'image' && selected.type !== 'video' && selected.type !== 'barcode' && selected.type !== 'grain' && selected.type !== 'code' && (
         <PropertyRow label="Color">
           <ColorPicker
             value={selected.color}
@@ -787,7 +805,8 @@ export function ControllerPage() {
       {selected.type !== 'fill' &&
         !(selected.type === 'rays' && selected.fullscreen) &&
         !(selected.type === 'grain' && selected.fullscreen) &&
-        !(selected.type === 'lines' && selected.fullscreen) && (
+        !(selected.type === 'lines' && selected.fullscreen) &&
+        !(selected.type === 'code' && selected.fullscreen) && (
         <PropertyRow label="Pos">
           <span className="text-slate-400 text-[10px] font-mono">
             {selected.x.toFixed(2)}, {selected.y.toFixed(2)}
@@ -806,7 +825,7 @@ export function ControllerPage() {
   const modifiersContent = (
     <div className="flex-1 min-h-0 overflow-y-auto">
       {selected ? (
-        selected.type === 'rays' || selected.type === 'grain' || selected.type === 'lines' ? (
+        selected.type === 'rays' || selected.type === 'grain' || selected.type === 'lines' || selected.type === 'code' ? (
           <p className="text-slate-700 text-[10px] px-3 py-2 italic">No modifiers for {selected.type}.</p>
         ) : (
           <>
@@ -826,7 +845,7 @@ export function ControllerPage() {
   const animationsContent = (
     <div className="flex-1 min-h-0 overflow-y-auto">
       {selected ? (
-        selected.type === 'fill' || selected.type === 'rays' || selected.type === 'grain' || selected.type === 'lines' ? (
+        selected.type === 'fill' || selected.type === 'rays' || selected.type === 'grain' || selected.type === 'lines' || selected.type === 'code' ? (
           <p className="text-slate-700 text-[10px] px-3 py-2 italic">
             No animations for {selected.type === 'fill' ? 'fills' : selected.type}.
           </p>
@@ -1064,6 +1083,7 @@ export function ControllerPage() {
               onAddBarcode={addBarcode}
               onAddRays={addRays}
               onAddGrain={addGrain}
+              onAddCode={addCode}
               onAddConcentric={addConcentric}
               onAddLines={addLines}
             />
@@ -1266,6 +1286,7 @@ export function ControllerPage() {
               onAddBarcode={addBarcode}
               onAddRays={addRays}
               onAddGrain={addGrain}
+              onAddCode={addCode}
               onAddConcentric={addConcentric}
               onAddLines={addLines}
             />

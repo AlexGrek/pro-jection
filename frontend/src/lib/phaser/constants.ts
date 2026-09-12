@@ -7,6 +7,7 @@ export const IMAGE_TEXTURE_PREFIX = 'img-'
 export const BARCODE_TEXTURE_PREFIX = 'barcode-'
 export const RAYS_TEXTURE_PREFIX = 'rays-'
 export const GRAIN_TEXTURE_PREFIX = 'grain-'
+export const CODE_TEXTURE_PREFIX = 'code-'
 export const CONCENTRIC_TEXTURE_PREFIX = 'concentric-'
 export const LINES_TEXTURE_PREFIX = 'lines-'
 

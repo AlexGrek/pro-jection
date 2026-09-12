@@ -3,7 +3,7 @@ import type { GlowModifier, GridSettings, Layer, Modifier, ProjectionSettings, S
 import { calibrationHex, getArrayModifier, getGlowModifier, getMatrixModifier, isIdentityCorners, withCorner } from '@/lib/scene'
 import { GLOW_PERIOD_MAX, GLOW_PERIOD_MIN } from '@/lib/scene'
 import { hexToInt } from './colors'
-import { BARCODE_TEXTURE_PREFIX, CANVAS_H, CANVAS_W, CONCENTRIC_TEXTURE_PREFIX, LINES_TEXTURE_PREFIX, CORNER_COLOR, CORNER_GRAB_FACTOR, CORNER_HANDLE_PX, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, GRAIN_TEXTURE_PREFIX, GRID_DEPTH, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, PROJECTION_DEPTH, RAYS_TEXTURE_PREFIX } from './constants'
+import { BARCODE_TEXTURE_PREFIX, CANVAS_H, CANVAS_W, CODE_TEXTURE_PREFIX, CONCENTRIC_TEXTURE_PREFIX, LINES_TEXTURE_PREFIX, CORNER_COLOR, CORNER_GRAB_FACTOR, CORNER_HANDLE_PX, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, GRAIN_TEXTURE_PREFIX, GRID_DEPTH, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, PROJECTION_DEPTH, RAYS_TEXTURE_PREFIX } from './constants'
 import { cornersToMatrix3d, projectUnit, squareToQuad } from './warp'
 import { applyText } from './renderers/text'
 import { applyShape } from './renderers/shape'
@@ -14,6 +14,7 @@ import { applyVideo, cleanupVideo } from './renderers/video'
 import { applyBarcode, cleanupBarcode } from './renderers/barcode'
 import { applyRays } from './renderers/rays'
 import { applyGrain } from './renderers/grain'
+import { applyCode } from './renderers/code'
 import { applyConcentric } from './renderers/concentric'
 import { applyLines } from './renderers/lines'
 import { drawGrid } from './renderers/grid'
@@ -117,7 +118,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     const layer = this.layerData.get(this.selectedId)
     // fills and fullscreen rays/grain span the whole canvas — panel highlight is the indicator
     if (!layer || layer.type === 'fill') return
-    if ((layer.type === 'rays' || layer.type === 'grain' || layer.type === 'lines') && layer.fullscreen) return
+    if ((layer.type === 'rays' || layer.type === 'grain' || layer.type === 'lines' || layer.type === 'code') && layer.fullscreen) return
 
     const go = this.gameObjects.get(this.selectedId)
     if (!go) return
@@ -180,7 +181,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       this._dispatchApply(layer)
       const go = this.gameObjects.get(layer.id)
       if (go) go.setDepth(i * 1000)
-      if (layer.type !== 'fill' && layer.type !== 'rays' && layer.type !== 'grain' && layer.type !== 'lines') this._applyGlow(layer.id, layer.modifiers)
+      if (layer.type !== 'fill' && layer.type !== 'rays' && layer.type !== 'grain' && layer.type !== 'lines' && layer.type !== 'code') this._applyGlow(layer.id, layer.modifiers)
 
       const baseGo = this.gameObjects.get(layer.id)
       // Images (icon/fill) use displayWidth/displayHeight because setDisplaySize
@@ -282,7 +283,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       this.gameObjects.delete(id)
     }
     this._glowFilters.delete(id)
-    for (const prefix of [FILL_TEXTURE_PREFIX, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, BARCODE_TEXTURE_PREFIX, RAYS_TEXTURE_PREFIX, GRAIN_TEXTURE_PREFIX, CONCENTRIC_TEXTURE_PREFIX, LINES_TEXTURE_PREFIX]) {
+    for (const prefix of [FILL_TEXTURE_PREFIX, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, BARCODE_TEXTURE_PREFIX, RAYS_TEXTURE_PREFIX, GRAIN_TEXTURE_PREFIX, CODE_TEXTURE_PREFIX, CONCENTRIC_TEXTURE_PREFIX, LINES_TEXTURE_PREFIX]) {
       const key = `${prefix}${id}`
       if (this.textures.exists(key)) this.textures.remove(key)
     }
@@ -378,6 +379,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     else if (layer.type === 'barcode') applyBarcode(this, layer)
     else if (layer.type === 'rays') applyRays(this, layer)
     else if (layer.type === 'grain') applyGrain(this, layer)
+    else if (layer.type === 'code') applyCode(this, layer)
     else if (layer.type === 'concentric') applyConcentric(this, layer)
     else if (layer.type === 'lines') applyLines(this, layer)
   }
