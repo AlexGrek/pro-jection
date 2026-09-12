@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import {
   IconBackground,
   IconBarcode,
+  IconChartDots3,
   IconChevronDown,
   IconChevronUp,
   IconChevronsDown,
@@ -104,6 +105,7 @@ function LayerIcon({ layer }: { layer: Layer }) {
   if (layer.type === 'video') return <IconMovie size={11} className="shrink-0" />
   if (layer.type === 'barcode') return <IconBarcode size={11} className="shrink-0" />
   if (layer.type === 'rays') return <IconGridDots size={11} className="shrink-0" />
+  if (layer.type === 'grain') return <IconChartDots3 size={11} className="shrink-0" />
   if (layer.shape === 'circle') return <IconCircle size={11} className="shrink-0" />
   return <IconSquare size={11} className="shrink-0" />
 }
@@ -117,6 +119,7 @@ function layerLabel(layer: Layer): string {
   if (layer.type === 'video') return layer.url ? 'Video' : 'Video (empty)'
   if (layer.type === 'barcode') return layer.code ? `Barcode ${layer.code}` : 'Barcode'
   if (layer.type === 'rays') return layer.fullscreen ? 'Rays (fullscreen)' : `Rays ${layer.columns}×${layer.rows}`
+  if (layer.type === 'grain') return layer.fullscreen ? 'Grain (fullscreen)' : 'Grain'
   return (layer as Layer).type
 }
 

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import {
   IconBackground,
   IconBarcode,
+  IconChartDots3,
   IconCircle,
   IconGridDots,
   IconLetterT,
@@ -22,9 +23,10 @@ interface Props {
   onAddVideo: () => void
   onAddBarcode: () => void
   onAddRays: () => void
+  onAddGrain: () => void
 }
 
-export function AddObjectPanel({ disabled, onAddText, onAddRectangle, onAddCircle, onAddFill, onAddIcon, onAddImage, onAddVideo, onAddBarcode, onAddRays }: Props) {
+export function AddObjectPanel({ disabled, onAddText, onAddRectangle, onAddCircle, onAddFill, onAddIcon, onAddImage, onAddVideo, onAddBarcode, onAddRays, onAddGrain }: Props) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 py-2 text-[10px] font-medium text-slate-500 border-b border-slate-800/60 uppercase tracking-wider">
@@ -40,6 +42,7 @@ export function AddObjectPanel({ disabled, onAddText, onAddRectangle, onAddCircl
         <AddButton disabled={disabled} icon={<IconMovie size={13} />} label="Video" onClick={onAddVideo} />
         <AddButton disabled={disabled} icon={<IconBarcode size={13} />} label="Barcode" onClick={onAddBarcode} />
         <AddButton disabled={disabled} icon={<IconGridDots size={13} />} label="Rays" onClick={onAddRays} />
+        <AddButton disabled={disabled} icon={<IconChartDots3 size={13} />} label="Grain" onClick={onAddGrain} />
       </div>
     </div>
   )

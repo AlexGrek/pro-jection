@@ -27,6 +27,7 @@ import { GlowAnimationPanel } from '@/components/controller/GlowAnimationPanel'
 import { GlowModifierPanel } from '@/components/controller/GlowModifierPanel'
 import { MatrixModifierPanel } from '@/components/controller/MatrixModifierPanel'
 import { FillProperties } from '@/components/controller/FillProperties'
+import { GrainProperties } from '@/components/controller/GrainProperties'
 import { GridControl } from '@/components/controller/GridControl'
 import { ProjectionControl } from '@/components/controller/ProjectionControl'
 import { IconProperties } from '@/components/controller/IconProperties'
@@ -51,10 +52,12 @@ import {
   DEFAULT_ICON_LAYER,
   DEFAULT_IMAGE_LAYER,
   DEFAULT_RAYS_LAYER,
+  DEFAULT_GRAIN_LAYER,
   DEFAULT_RECT_LAYER,
   DEFAULT_TEXT_LAYER,
   DEFAULT_VIDEO_LAYER,
   randomBarcodeValue,
+  randomGrainSeed,
   withCorner,
   type ProjectionSettings,
   type FillLayer,
@@ -62,6 +65,7 @@ import {
   type ImageLayer,
   type BarcodeLayer,
   type RaysLayer,
+  type GrainLayer,
   type GridSettings,
   type Layer,
   type Scene,
@@ -107,6 +111,14 @@ function resizeLayer(layer: Layer, factor: number): Layer {
       return { ...layer, width: clamp(layer.width * factor, 0.02, 3) }
     case 'rays':
       return layer.fullscreen ? layer : { ...layer, cell_size: clamp(layer.cell_size * factor, 0.01, 0.5) }
+    case 'grain':
+      return layer.fullscreen
+        ? layer
+        : {
+            ...layer,
+            width: clamp(layer.width * factor, 0.02, 3),
+            height: clamp(layer.height * factor, 0.02, 3),
+          }
     default:
       return layer
   }
@@ -541,6 +553,11 @@ export function ControllerPage() {
     code: randomBarcodeValue(DEFAULT_BARCODE_LAYER.format),
   } as BarcodeLayer)
   const addRays      = () => addLayerAtEnd({ ...DEFAULT_RAYS_LAYER, id: crypto.randomUUID() } as RaysLayer)
+  const addGrain     = () => addLayerAtEnd({
+    ...DEFAULT_GRAIN_LAYER,
+    id: crypto.randomUUID(),
+    seed: randomGrainSeed(),
+  } as GrainLayer)
 
   const addFill = () => {
     const newLayer: FillLayer = {
@@ -713,8 +730,9 @@ export function ControllerPage() {
       {selected.type === 'video' && <VideoProperties layer={selected} controls={controls} />}
       {selected.type === 'barcode' && <BarcodeProperties layer={selected} controls={controls} />}
       {selected.type === 'rays'   && <RaysProperties    layer={selected} controls={controls} />}
+      {selected.type === 'grain' && <GrainProperties   layer={selected} controls={controls} />}
 
-      {selected.type !== 'fill' && selected.type !== 'image' && selected.type !== 'video' && selected.type !== 'barcode' && (
+      {selected.type !== 'fill' && selected.type !== 'image' && selected.type !== 'video' && selected.type !== 'barcode' && selected.type !== 'grain' && (
         <PropertyRow label="Color">
           <ColorPicker
             value={selected.color}
@@ -742,7 +760,9 @@ export function ControllerPage() {
         </span>
       </PropertyRow>
 
-      {selected.type !== 'fill' && !(selected.type === 'rays' && selected.fullscreen) && (
+      {selected.type !== 'fill' &&
+        !(selected.type === 'rays' && selected.fullscreen) &&
+        !(selected.type === 'grain' && selected.fullscreen) && (
         <PropertyRow label="Pos">
           <span className="text-slate-400 text-[10px] font-mono">
             {selected.x.toFixed(2)}, {selected.y.toFixed(2)}
@@ -761,8 +781,8 @@ export function ControllerPage() {
   const modifiersContent = (
     <div className="flex-1 min-h-0 overflow-y-auto">
       {selected ? (
-        selected.type === 'rays' ? (
-          <p className="text-slate-700 text-[10px] px-3 py-2 italic">No modifiers for rays.</p>
+        selected.type === 'rays' || selected.type === 'grain' ? (
+          <p className="text-slate-700 text-[10px] px-3 py-2 italic">No modifiers for {selected.type}.</p>
         ) : (
           <>
             <ArrayModifierPanel layer={selected} controls={controls} />
@@ -781,9 +801,9 @@ export function ControllerPage() {
   const animationsContent = (
     <div className="flex-1 min-h-0 overflow-y-auto">
       {selected ? (
-        selected.type === 'fill' || selected.type === 'rays' ? (
+        selected.type === 'fill' || selected.type === 'rays' || selected.type === 'grain' ? (
           <p className="text-slate-700 text-[10px] px-3 py-2 italic">
-            No animations for {selected.type === 'fill' ? 'fills' : 'rays'}.
+            No animations for {selected.type === 'fill' ? 'fills' : selected.type}.
           </p>
         ) : (
           <GlowAnimationPanel layer={selected} controls={controls} />
@@ -1018,6 +1038,7 @@ export function ControllerPage() {
               onAddVideo={addVideo}
               onAddBarcode={addBarcode}
               onAddRays={addRays}
+              onAddGrain={addGrain}
             />
           )}
         </div>
@@ -1217,6 +1238,7 @@ export function ControllerPage() {
               onAddVideo={addVideo}
               onAddBarcode={addBarcode}
               onAddRays={addRays}
+              onAddGrain={addGrain}
             />
           </div>
         </div>
