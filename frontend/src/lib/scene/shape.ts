@@ -38,5 +38,5 @@ export const DEFAULT_CIRCLE_LAYER: Omit<ShapeLayer, 'id'> = {
   ...DEFAULT_RECT_LAYER,
   shape: 'circle',
   width: 0.2,
-  height: 0.2,
+  height: 0.2 * (16 / 9),
 }

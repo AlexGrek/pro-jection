@@ -10,14 +10,27 @@ interface Props {
 
 export function ConcentricProperties({ layer, controls }: Props) {
   const { patch, sendNow, sendCurrent, disabled } = controls
-  const aspectMultiplier = CANVAS_W / CANVAS_H // 1920 / 1080 = 1.777...
+  
+  // Square and Circle have a physical aspect ratio of 1:1 (factor = 1).
+  // An equilateral triangle has a height of sqrt(3)/2 times its width (factor ≈ 0.866).
+  const shapeFactor = layer.shape === 'triangle' ? Math.sqrt(3) / 2 : 1
+  const aspectMultiplier = (CANVAS_W / CANVAS_H) * shapeFactor
 
   return (
     <>
       <PropertyRow label="Shape">
         <select
           value={layer.shape}
-          onChange={(e) => sendNow(patch({ shape: e.target.value as ConcentricLayer['shape'] }))}
+          onChange={(e) => {
+            const newShape = e.target.value as ConcentricLayer['shape']
+            if (layer.aspect_locked) {
+              const newFactor = newShape === 'triangle' ? Math.sqrt(3) / 2 : 1
+              const newMultiplier = (CANVAS_W / CANVAS_H) * newFactor
+              sendNow(patch({ shape: newShape, height: layer.width * newMultiplier }))
+            } else {
+              sendNow(patch({ shape: newShape }))
+            }
+          }}
           disabled={disabled}
           className="flex-1 bg-slate-900 border border-slate-700 text-white text-[10px] rounded h-7 px-1.5 disabled:opacity-40"
         >
@@ -43,7 +56,7 @@ export function ConcentricProperties({ layer, controls }: Props) {
             disabled={disabled}
             className="accent-blue-500"
           />
-          1:1 aspect ratio
+          Lock regular shape
         </label>
       </PropertyRow>
 
