@@ -14,16 +14,36 @@ function drawConcentric(c: CanvasRenderingContext2D, layer: ConcentricLayer, tw:
   
   c.strokeStyle = layer.color
   c.lineWidth = layer.stroke_width
-  // Phaser canvas textures might scale, but we'll draw centered.
   
   const count = Math.max(1, layer.count)
   
+  // For triangles, to keep the spacing equal on all three sides (true concentricity),
+  // we must align the incenters of all scaled triangles.
+  let outerIncenterOffset = 0
+  if (layer.shape === 'triangle') {
+    const wOuter = tw - layer.stroke_width
+    const hOuter = th - layer.stroke_width
+    if (wOuter > 0 && hOuter > 0) {
+      const L = Math.sqrt((wOuter / 2) ** 2 + hOuter ** 2)
+      const rOuter = (wOuter * hOuter) / (wOuter + 2 * L)
+      outerIncenterOffset = hOuter / 2 - rOuter
+    }
+  }
+
   for (let i = 0; i < count; i++) {
-    // scale from 1 (outermost) down to 1/count (innermost)
     const scale = (count - i) / count
     const w = tw * scale - layer.stroke_width
     const h = th * scale - layer.stroke_width
     if (w <= 0 || h <= 0) continue
+
+    let cy_inner = cy
+    if (layer.shape === 'triangle') {
+      const L = Math.sqrt((w / 2) ** 2 + h ** 2)
+      const r_inner = (w * h) / (w + 2 * L)
+      const innerIncenterOffset = h / 2 - r_inner
+      // Shift so that this triangle's incenter matches the outer triangle's incenter
+      cy_inner = cy + outerIncenterOffset - innerIncenterOffset
+    }
 
     c.beginPath()
     if (layer.shape === 'circle') {
@@ -32,9 +52,9 @@ function drawConcentric(c: CanvasRenderingContext2D, layer: ConcentricLayer, tw:
     } else if (layer.shape === 'square') {
       c.rect(cx - w / 2, cy - h / 2, w, h)
     } else if (layer.shape === 'triangle') {
-      c.moveTo(cx, cy - h / 2)
-      c.lineTo(cx + w / 2, cy + h / 2)
-      c.lineTo(cx - w / 2, cy + h / 2)
+      c.moveTo(cx, cy_inner - h / 2)
+      c.lineTo(cx + w / 2, cy_inner + h / 2)
+      c.lineTo(cx - w / 2, cy_inner + h / 2)
       c.closePath()
     }
     c.stroke()
