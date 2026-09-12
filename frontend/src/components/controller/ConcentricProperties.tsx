@@ -24,6 +24,26 @@ export function ConcentricProperties({ layer, controls }: Props) {
           <option value="triangle">Triangle</option>
         </select>
       </PropertyRow>
+      
+      <PropertyRow label="Aspect">
+        <label className="flex items-center gap-1.5 text-slate-400 text-[10px] font-light cursor-pointer">
+          <input
+            type="checkbox"
+            checked={layer.aspect_locked ?? false}
+            onChange={(e) => {
+              const locked = e.target.checked
+              if (locked) {
+                sendNow(patch({ aspect_locked: true, height: layer.width }))
+              } else {
+                sendNow(patch({ aspect_locked: false }))
+              }
+            }}
+            disabled={disabled}
+            className="accent-blue-500"
+          />
+          1:1 aspect ratio
+        </label>
+      </PropertyRow>
 
       <PropertyRow label="Width">
         <input
@@ -31,7 +51,10 @@ export function ConcentricProperties({ layer, controls }: Props) {
           min={1}
           max={100}
           value={Math.round(layer.width * 100)}
-          onChange={(e) => patch({ width: Number(e.target.value) / 100 })}
+          onChange={(e) => {
+            const w = Number(e.target.value) / 100
+            patch(layer.aspect_locked ? { width: w, height: w } : { width: w })
+          }}
           onPointerUp={sendCurrent}
           onKeyUp={sendCurrent}
           disabled={disabled}
@@ -46,7 +69,10 @@ export function ConcentricProperties({ layer, controls }: Props) {
           min={1}
           max={100}
           value={Math.round(layer.height * 100)}
-          onChange={(e) => patch({ height: Number(e.target.value) / 100 })}
+          onChange={(e) => {
+            const h = Number(e.target.value) / 100
+            patch(layer.aspect_locked ? { width: h, height: h } : { height: h })
+          }}
           onPointerUp={sendCurrent}
           onKeyUp={sendCurrent}
           disabled={disabled}

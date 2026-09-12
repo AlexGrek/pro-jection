@@ -13,6 +13,7 @@ export interface ConcentricLayer extends BaseLayer {
   color: string
   count: number
   stroke_width: number
+  aspect_locked: boolean
 }
 
 export const DEFAULT_CONCENTRIC_LAYER: Omit<ConcentricLayer, 'id'> = {
@@ -22,6 +23,7 @@ export const DEFAULT_CONCENTRIC_LAYER: Omit<ConcentricLayer, 'id'> = {
   y: 0.5,
   width: 0.4,
   height: 0.4,
+  aspect_locked: true,
   color: '#a855f7',
   count: 3,
   stroke_width: 4,
