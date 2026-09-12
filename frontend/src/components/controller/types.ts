@@ -17,3 +17,10 @@ export interface PropertyControls {
   sendCurrent: () => void
   disabled: boolean
 }
+
+/**
+ * When a scene-wide control (grid overlay, projection, post-processing) pushes its
+ * change out. `'none'` previews locally only — what a slider does mid-drag, before
+ * committing on release. See the send-timing table in CLAUDE.md.
+ */
+export type SendMode = 'now' | 'debounced' | 'none'

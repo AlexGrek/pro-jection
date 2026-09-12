@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, forwardRef } from 'react'
 import Phaser from 'phaser'
 import { ProjectionScene } from '@/lib/phaser/ProjectionScene'
-import type { ProjectionSettings, Scene } from '@/lib/scene'
+import type { Effect, ProjectionSettings, Scene } from '@/lib/scene'
 
 export interface PhaserCanvasHandle {
   applyScene(scene: Scene): void
@@ -9,6 +9,8 @@ export interface PhaserCanvasHandle {
   getScene(): Scene
   /** Update only the keystone warp — avoids re-dispatching every layer while calibrating. */
   setProjection(projection?: ProjectionSettings): void
+  /** Update only the post-processing chain — avoids re-dispatching every layer while tuning an effect. */
+  setEffects(effects?: Effect[]): void
 }
 
 interface Props {
@@ -90,10 +92,14 @@ export const PhaserCanvas = forwardRef<PhaserCanvasHandle, Props>(
       sceneRef.current?.applyProjection(projection)
     }, [])
 
+    const setEffects = useCallback((effects?: Effect[]) => {
+      sceneRef.current?.applyEffects(effects)
+    }, [])
+
     useImperativeHandle(
       ref,
-      () => ({ applyScene, selectObject, getScene, setProjection }),
-      [applyScene, selectObject, getScene, setProjection],
+      () => ({ applyScene, selectObject, getScene, setProjection, setEffects }),
+      [applyScene, selectObject, getScene, setProjection, setEffects],
     )
 
     useEffect(() => {

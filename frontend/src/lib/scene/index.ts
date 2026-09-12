@@ -17,6 +17,7 @@ import type { RaysLayer } from './rays'
 import type { GrainLayer } from './grain'
 import type { CodeLayer } from './code'
 import type { LinesLayer } from './lines'
+import type { Effect } from './effects'
 import type { GridSettings } from './grid'
 import type { ProjectionSettings } from './projection'
 import type { ConcentricLayer } from './concentric'
@@ -35,6 +36,7 @@ export * from './grain'
 export * from './code'
 export * from './concentric'
 export * from './lines'
+export * from './effects'
 export * from './grid'
 export * from './projection'
 
@@ -60,6 +62,8 @@ export interface Scene {
   grid?: GridSettings
   /** Keystone warp applied to the whole canvas. Absent = flat. */
   projection?: ProjectionSettings
+  /** Post-processing filters applied to the whole canvas, in order. Absent/empty = none. */
+  effects?: Effect[]
 }
 
 export const EMPTY_SCENE: Scene = { objects: [] }

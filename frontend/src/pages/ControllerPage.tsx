@@ -31,6 +31,7 @@ import { MatrixModifierPanel } from '@/components/controller/MatrixModifierPanel
 import { FillProperties } from '@/components/controller/FillProperties'
 import { GrainProperties } from '@/components/controller/GrainProperties'
 import { CodeProperties } from '@/components/controller/CodeProperties'
+import { EffectsControl } from '@/components/controller/EffectsControl'
 import { GridControl } from '@/components/controller/GridControl'
 import { ProjectionControl } from '@/components/controller/ProjectionControl'
 import { IconProperties } from '@/components/controller/IconProperties'
@@ -47,7 +48,7 @@ import {
   SaveSceneDialog,
   type SavedSceneMeta,
 } from '@/components/controller/SceneStorageDialogs'
-import type { PropertyControls } from '@/components/controller/types'
+import type { PropertyControls, SendMode } from '@/components/controller/types'
 import {
   DEFAULT_CIRCLE_LAYER,
   DEFAULT_BARCODE_LAYER,
@@ -67,6 +68,7 @@ import {
   randomCodeSeed,
   withCorner,
   type ProjectionSettings,
+  type Effect,
   type FillLayer,
   type IconLayer,
   type ImageLayer,
@@ -221,6 +223,7 @@ export function ControllerPage() {
   const [objects, setObjects] = useState<Layer[]>([])
   const [grid, setGrid] = useState<GridSettings | null>(null)
   const [projection, setProjection] = useState<ProjectionSettings | null>(null)
+  const [effects, setEffects] = useState<Effect[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   // Controller-local projection view state, deliberately not part of the Scene: the
@@ -240,6 +243,8 @@ export function ControllerPage() {
   useEffect(() => { gridRef.current = grid }, [grid])
   const projectionRef = useRef<ProjectionSettings | null>(projection)
   useEffect(() => { projectionRef.current = projection }, [projection])
+  const effectsRef = useRef<Effect[]>(effects)
+  useEffect(() => { effectsRef.current = effects }, [effects])
   const selectedCornerRef = useRef<number | null>(selectedCorner)
   useEffect(() => { selectedCornerRef.current = selectedCorner }, [selectedCorner])
   const selectedIdRef = useRef<string | null>(null)
@@ -264,15 +269,16 @@ export function ControllerPage() {
   const resizeAddW    = useCallback((d: number) => setAddW(w    => Math.max(120, Math.min(400, w - d))), [])
 
   // ── Local sync: state + canvas ────────────────────────────────────────────
-  // The grid overlay and the projection warp are scene-wide, not layers — they ride
-  // along on every apply and send via their refs so the objects-centric helpers stay
-  // unchanged.
+  // The grid overlay, the projection warp and the post-processing chain are scene-wide,
+  // not layers — they ride along on every apply and send via their refs so the
+  // objects-centric helpers stay unchanged.
   const applyObjects = useCallback((next: Layer[]) => {
     setObjects(next)
     canvasRef.current?.applyScene({
       objects: next,
       grid: gridRef.current ?? undefined,
       projection: projectionRef.current ?? undefined,
+      effects: effectsRef.current.length > 0 ? effectsRef.current : undefined,
     })
   }, [])
 
@@ -287,6 +293,7 @@ export function ControllerPage() {
       objects: next,
       grid: gridRef.current ?? undefined,
       projection: projectionRef.current ?? undefined,
+      effects: effectsRef.current.length > 0 ? effectsRef.current : undefined,
     } satisfies Scene))
   }, [])
 
@@ -325,6 +332,8 @@ export function ControllerPage() {
         setGrid(scene.grid ?? null)
         projectionRef.current = scene.projection ?? null
         setProjection(scene.projection ?? null)
+        effectsRef.current = scene.effects ?? []
+        setEffects(scene.effects ?? [])
         applyObjects(scene.objects)
       }
     }
@@ -380,6 +389,19 @@ export function ControllerPage() {
     })
     sendNow(objectsRef.current)
   }, [sendNow])
+
+  // ── Post-processing ───────────────────────────────────────────────────────
+  // Like corner tweaks, effect edits go straight to the canvas via setEffects rather
+  // than a full applyScene — tuning a slider must not re-dispatch every layer. `mode`
+  // carries the send-timing contract: 'none' is the local-only preview a slider does
+  // mid-drag, flushed by sendCurrent on release.
+  const changeEffects = useCallback((next: Effect[], mode: SendMode = 'now') => {
+    effectsRef.current = next
+    setEffects(next)
+    canvasRef.current?.setEffects(next.length > 0 ? next : undefined)
+    if (mode === 'now') sendNow(objectsRef.current)
+    else if (mode === 'debounced') sendDebounced(objectsRef.current)
+  }, [sendNow, sendDebounced])
 
   // ── Projection (keystone warp) ────────────────────────────────────────────
   // Corner tweaks go straight to the canvas via setProjection rather than a full
@@ -637,6 +659,7 @@ export function ControllerPage() {
     objects: objs,
     grid: gridRef.current ?? undefined,
     projection: projectionRef.current ?? undefined,
+    effects: effectsRef.current.length > 0 ? effectsRef.current : undefined,
   })
 
   // POST a new saved scene (first save of a new scene, or "Save As").
@@ -688,6 +711,8 @@ export function ControllerPage() {
     setGrid(data.scene.grid ?? null)
     projectionRef.current = data.scene.projection ?? null
     setProjection(data.scene.projection ?? null)
+    effectsRef.current = data.scene.effects ?? []
+    setEffects(data.scene.effects ?? [])
     applyObjects(objs)
     sendNow(objs)
     setSelectedId(null)
@@ -979,6 +1004,12 @@ export function ControllerPage() {
             >
               <IconFileZip size={15} stroke={1.5} />
             </Button>
+            <EffectsControl
+              effects={effects}
+              onChange={changeEffects}
+              onCommit={sendCurrent}
+              disabled={connState !== 'connected'}
+            />
             <GridControl grid={grid} onChange={changeGrid} disabled={connState !== 'connected'} />
             <ProjectionControl
               projection={projection}
@@ -1156,6 +1187,12 @@ export function ControllerPage() {
           >
             <IconFileZip size={15} stroke={1.5} />
           </Button>
+          <EffectsControl
+            effects={effects}
+            onChange={changeEffects}
+            onCommit={sendCurrent}
+            disabled={connState !== 'connected'}
+          />
           <GridControl grid={grid} onChange={changeGrid} disabled={connState !== 'connected'} />
           <ProjectionControl
             projection={projection}

@@ -1,10 +1,11 @@
 import Phaser from 'phaser'
-import type { GlowModifier, GridSettings, Layer, Modifier, ProjectionSettings, Scene } from '@/lib/scene'
+import type { Effect, GlowModifier, GridSettings, Layer, Modifier, ProjectionSettings, Scene } from '@/lib/scene'
 import { calibrationHex, getArrayModifier, getGlowModifier, getMatrixModifier, isIdentityCorners, withCorner } from '@/lib/scene'
 import { GLOW_PERIOD_MAX, GLOW_PERIOD_MIN } from '@/lib/scene'
 import { hexToInt } from './colors'
 import { BARCODE_TEXTURE_PREFIX, CANVAS_H, CANVAS_W, CODE_TEXTURE_PREFIX, CONCENTRIC_TEXTURE_PREFIX, LINES_TEXTURE_PREFIX, CORNER_COLOR, CORNER_GRAB_FACTOR, CORNER_HANDLE_PX, FILL_TEXTURE_PREFIX, GLOW_BREATH_MIN, GRAIN_TEXTURE_PREFIX, GRID_DEPTH, ICON_TEXTURE_PREFIX, IMAGE_TEXTURE_PREFIX, PROJECTION_DEPTH, RAYS_TEXTURE_PREFIX } from './constants'
 import { cornersToMatrix3d, projectUnit, squareToQuad } from './warp'
+import { PostFxChain } from './postfx'
 import { applyText } from './renderers/text'
 import { applyShape } from './renderers/shape'
 import { applyFill } from './renderers/fill'
@@ -55,6 +56,9 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   private _grid?: Phaser.GameObjects.Graphics
   private _gridSettings?: GridSettings
 
+  private _effects?: Effect[]
+  private _postFx?: PostFxChain
+
   private _projection?: ProjectionSettings
   /** Controller-local flat preview turns the warp off without clearing the corners. */
   private _warpEnabled = true
@@ -68,6 +72,8 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
   }
 
   create() {
+    this._postFx = new PostFxChain(this)
+
     if (this.editable) {
       this.hint = this.add
         .text(CANVAS_W / 2, CANVAS_H / 2, 'Add objects in the panel below', {
@@ -99,6 +105,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     this.scale.on(Phaser.Scale.Events.RESIZE, this._layoutCanvas, this)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, this._layoutCanvas, this)
+      this._postFx?.destroy()
     })
     this._layoutCanvas()
 
@@ -226,7 +233,9 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     })
 
     this._applyGrid(scene.grid)
-    // Also settles layer/grid/hint visibility, which calibration mode overrides.
+    this._effects = scene.effects
+    // Also settles layer/grid/hint visibility and the post-processing bypass, both of
+    // which calibration mode overrides.
     this.applyProjection(scene.projection)
   }
 
@@ -239,6 +248,7 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
       objects: Array.from(this.layerData.values()),
       grid: this._gridSettings,
       projection: this._projection,
+      effects: this._effects,
     }
   }
 
@@ -253,7 +263,31 @@ export class ProjectionScene extends Phaser.Scene implements RenderCtx {
     this._projection = projection
     this._drawCalibration()
     this._applyLayerVisibility()
+    this._applyPostFx()
     this._layoutCanvas()
+  }
+
+  // ── Post-processing ───────────────────────────────────────────────────────
+
+  /**
+   * Set the scene-wide post-processing chain. Called from `applyScene`, and directly
+   * by the controller while an effect is being tuned so a slider drag doesn't
+   * re-dispatch every layer.
+   */
+  applyEffects(effects?: Effect[]): void {
+    this._effects = effects
+    this._applyPostFx()
+  }
+
+  /**
+   * Post-processing is bypassed on *every* client while calibration mode is on. A
+   * blurred, pixelated or posterized alignment grid tells you nothing about where the
+   * quad lands on the real surface, and that is the one moment where matching the wall
+   * matters more than matching the look. The settings are untouched, so leaving
+   * calibration brings the chain straight back.
+   */
+  private _applyPostFx(): void {
+    this._postFx?.apply(this._projection?.editing ? [] : this._effects ?? [])
   }
 
   /** Controller-only: `false` previews the scene flat while keeping the corners. */
